@@ -1,8 +1,8 @@
-# 🧞 JobGenie RAG Assistant
+# JobGenie RAG Assistant
 
 > An AI-powered career co-pilot that analyzes your resume against any job description — generating skill gap reports, 60-second pitches, interview question predictions, and confidence scores in real time.
 
-[![Live Demo](https://img.shields.io/badge/🤗%20HuggingFace-Live%20Demo-orange?style=for-the-badge)](https://huggingface.co/spaces/Utkarsh94123/jobgenie-rag-assistant)
+[![Live Demo](https://img.shields.io/badge/HuggingFace-Live%20Demo-orange?style=for-the-badge)](https://huggingface.co/spaces/Utkarsh94123/jobgenie-rag-assistant)
 [![LangChain](https://img.shields.io/badge/LangChain-Framework-1C3C3C?style=for-the-badge&logo=chainlink)](https://www.langchain.com/)
 [![Groq](https://img.shields.io/badge/Groq-LLaMA%203.3%2070B-F55036?style=for-the-badge)](https://groq.com/)
 [![Pinecone](https://img.shields.io/badge/Pinecone-Vector%20DB-00BCD4?style=for-the-badge)](https://www.pinecone.io/)
@@ -11,7 +11,7 @@
 
 ---
 
-## 🎯 Problem Statement
+## Problem Statement
 
 Job seekers spend hours manually comparing their resume to job descriptions — and often still miss critical skill gaps, fail to articulate their value clearly, or walk into interviews underprepared.
 
@@ -19,92 +19,77 @@ JobGenie solves this with a Retrieval-Augmented Generation (RAG) pipeline that i
 
 ---
 
-## ✨ Features
+## Features
 
 | Feature | Description |
 |---|---|
-| 🔍 **Skill Gap Analysis** | Compares your resume against the JD and highlights missing skills, partial matches, and strong overlaps |
-| 🎤 **60-Second Pitch Generator** | Creates a personalized, interview-ready elevator pitch tailored to the specific role |
-| ❓ **Interview Question Predictor** | Predicts the top 5–8 likely interview questions based on the JD and your background |
-| 📊 **JD Comparison Table** | Side-by-side structured comparison of JD requirements vs. your profile |
-| 💡 **Confidence Score Dashboard** | Numeric readiness score with breakdown by category (technical, domain, soft skills) |
+| Skill Gap Analysis | Compares your resume against the JD and highlights missing skills, partial matches, and strong overlaps |
+| 60-Second Pitch Generator | Creates a personalized, interview-ready elevator pitch tailored to the specific role |
+| Interview Question Predictor | Predicts the top 5-8 likely interview questions based on the JD and your background |
+| JD Comparison Table | Side-by-side structured comparison of JD requirements vs. your profile |
+| Confidence Score Dashboard | Numeric readiness score with breakdown by category (technical, domain, soft skills) |
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| **LLM** | Groq · LLaMA 3.3 70B (ultra-low latency inference) |
-| **RAG Framework** | LangChain (document loaders, chains, prompt templates) |
-| **Vector Store** | Pinecone (semantic search over resume + JD embeddings) |
-| **Chat UI** | Chainlit (streaming, session management, file upload) |
-| **Containerization** | Docker + Docker Compose |
-| **Deployment** | HuggingFace Spaces |
-| **Embeddings** | HuggingFace Sentence Transformers |
+| LLM | Groq — LLaMA 3.3 70B (ultra-low latency inference) |
+| RAG Framework | LangChain (document loaders, chains, prompt templates) |
+| Vector Store | Pinecone (semantic search over resume + JD embeddings) |
+| Chat UI | Chainlit (streaming, session management, file upload) |
+| Containerization | Docker + Docker Compose |
+| Deployment | HuggingFace Spaces |
+| Embeddings | HuggingFace Sentence Transformers |
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 User Input (Resume PDF + Job Description)
-        │
-        ▼
+        ↓
   Document Loader (LangChain)
-        │
-        ▼
-  Text Chunking & Embedding (HuggingFace)
-        │
-        ▼
-  Pinecone Vector Store ◄──── Semantic Retrieval
-        │
-        ▼
+        ↓
+  Text Chunking and Embedding (HuggingFace)
+        ↓
+  Pinecone Vector Store  ←  Semantic Retrieval
+        ↓
   RAG Chain (LangChain + Groq LLaMA 3.3 70B)
-        │
-        ▼
-  ┌─────────────────────────────────────┐
-  │  Skill Gap │ Pitch │ Questions │ Score │
-  └─────────────────────────────────────┘
-        │
-        ▼
+        ↓
+  Skill Gap | Pitch | Questions | Score
+        ↓
   Chainlit Chat Interface
 ```
 
 ---
 
-## 🚀 Live Demo
+## Live Demo
 
-👉 **[Try it on HuggingFace Spaces](https://huggingface.co/spaces/Utkarsh94123/jobgenie-rag-assistant)**
+**[Try it on HuggingFace Spaces](https://huggingface.co/spaces/Utkarsh94123/jobgenie-rag-assistant)**
 
 Upload your resume (PDF), paste any job description, and get your full career intelligence report in under 30 seconds.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 jobgenie-rag-assistant/
 ├── app.py                  # Chainlit app entry point
 ├── rag_pipeline.py         # Core RAG chain (LangChain + Groq)
-├── vector_store.py         # Pinecone indexing & retrieval
-├── prompts/
-│   ├── skill_gap.py        # Skill gap analysis prompt template
-│   ├── pitch_generator.py  # 60-sec pitch prompt template
-│   ├── interview_qs.py     # Interview question predictor
-│   └── confidence.py       # Confidence score prompt
-├── utils/
-│   ├── pdf_parser.py       # Resume PDF extraction
-│   └── jd_parser.py        # Job description preprocessing
+├── embeddings.py           # Pinecone indexing and knowledge base
+├── jd_parser.py            # Job description preprocessing
 ├── Dockerfile
-├── docker-compose.yml
 ├── requirements.txt
+├── .env.example
 └── README.md
 ```
 
 ---
 
-## ⚙️ Local Setup
+## Local Setup
 
 ### Prerequisites
 - Python 3.10+
@@ -112,19 +97,19 @@ jobgenie-rag-assistant/
 - Pinecone API key (free tier)
 - Groq API key (free tier)
 
-### Option 1: Run with Docker (Recommended)
+### Option 1: Run with Docker
 
 ```bash
 git clone https://github.com/utkarshkapoor95/jobgenie-rag-assistant.git
 cd jobgenie-rag-assistant
 
 cp .env.example .env
-# Fill in your PINECONE_API_KEY and GROQ_API_KEY in .env
+# Fill in your PINECONE_API_KEY and GROQ_API_KEY
 
 docker-compose up --build
 ```
 
-App will be live at `http://localhost:8000`
+App will be live at `http://localhost:7860`
 
 ### Option 2: Run Locally
 
@@ -145,23 +130,22 @@ chainlit run app.py
 
 ---
 
-## 🔑 Environment Variables
+## Environment Variables
 
 ```env
+GROQ_API_KEY=your_groq_api_key
 PINECONE_API_KEY=your_pinecone_api_key
 PINECONE_INDEX_NAME=jobgenie-index
-GROQ_API_KEY=your_groq_api_key
-GROQ_MODEL=llama-3.3-70b-versatile
 HF_TOKEN=your_huggingface_token
 ```
 
 ---
 
-## 📈 Sample Output
+## Sample Output
 
 **Input:** Senior Data Analyst JD + MBA student resume with ops background
 
-**Confidence Score:** `72/100`
+**Confidence Score:** 72/100
 
 | Category | Score | Gap |
 |---|---|---|
@@ -171,25 +155,19 @@ HF_TOKEN=your_huggingface_token
 | AI/ML Readiness | 60/100 | Improving: RAG, LangChain |
 
 **Generated Pitch Preview:**
-> *"I bring 3+ years of operations experience where I translated messy ground-level data into decisions that reduced costs and improved process efficiency. Now, with an MBA and hands-on AI projects like this RAG assistant, I combine business context with technical execution — which means I don't just build dashboards, I build ones that actually get used."*
+> "I bring 3+ years of operations experience where I translated messy ground-level data into decisions that reduced costs and improved process efficiency. Now, with an MBA and hands-on AI projects like this RAG assistant, I combine business context with technical execution — which means I don't just build dashboards, I build ones that actually get used."
 
 ---
 
-## 🙋 About the Builder
+## About the Builder
 
 Built by **Utkarsh Kapoor** — MBA candidate transitioning from Operations to AI/Data roles.
-
-This project reflects my belief that the best data tools solve real human problems — and nothing is more stressful than a job search. JobGenie is my attempt to give every candidate access to the kind of career intelligence that was previously locked behind expensive coaches.
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=flat&logo=linkedin)](https://linkedin.com/in/utkarsh-kapoor-618256203)
 [![HuggingFace](https://img.shields.io/badge/HuggingFace-Profile-orange?style=flat)](https://huggingface.co/Utkarsh94123)
 
 ---
 
-## 📄 License
+## License
 
 MIT License — free to use, fork, and build upon.
-
----
-
-*If this helped you, drop a ⭐ — it means a lot and helps others find the project.*
