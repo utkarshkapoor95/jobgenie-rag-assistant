@@ -109,21 +109,18 @@ jobgenie-rag-assistant/
 ### Prerequisites
 - Python 3.10+
 - Docker (optional but recommended)
-- Pinecone API key
-- Groq API key
+- Pinecone API key (free tier)
+- Groq API key (free tier)
 
 ### Option 1: Run with Docker (Recommended)
 
 ```bash
-# Clone the repo
-git clone https://github.com/YOUR_USERNAME/jobgenie-rag-assistant.git
+git clone https://github.com/utkarshkapoor95/jobgenie-rag-assistant.git
 cd jobgenie-rag-assistant
 
-# Set environment variables
 cp .env.example .env
 # Fill in your PINECONE_API_KEY and GROQ_API_KEY in .env
 
-# Build and run
 docker-compose up --build
 ```
 
@@ -132,22 +129,17 @@ App will be live at `http://localhost:8000`
 ### Option 2: Run Locally
 
 ```bash
-# Clone and set up
-git clone https://github.com/YOUR_USERNAME/jobgenie-rag-assistant.git
+git clone https://github.com/utkarshkapoor95/jobgenie-rag-assistant.git
 cd jobgenie-rag-assistant
 
-# Create virtual environment
 python -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 
-# Install dependencies
 pip install -r requirements.txt
 
-# Set environment variables
 export PINECONE_API_KEY=your_key_here
 export GROQ_API_KEY=your_key_here
 
-# Run the app
 chainlit run app.py
 ```
 
@@ -160,7 +152,7 @@ PINECONE_API_KEY=your_pinecone_api_key
 PINECONE_INDEX_NAME=jobgenie-index
 GROQ_API_KEY=your_groq_api_key
 GROQ_MODEL=llama-3.3-70b-versatile
-HF_TOKEN=your_huggingface_token   # Only needed for HF Spaces deployment
+HF_TOKEN=your_huggingface_token
 ```
 
 ---
@@ -183,23 +175,13 @@ HF_TOKEN=your_huggingface_token   # Only needed for HF Spaces deployment
 
 ---
 
-## 🔮 Roadmap
-
-- [ ] LinkedIn profile ingestion (in addition to PDF resume)
-- [ ] Multi-JD batch comparison mode
-- [ ] ATS score simulator
-- [ ] Resume rewrite suggestions based on skill gaps
-- [ ] Shareable PDF report export
-
----
-
 ## 🙋 About the Builder
 
 Built by **Utkarsh Kapoor** — MBA candidate transitioning from Operations to AI/Data roles.
 
 This project reflects my belief that the best data tools solve real human problems — and nothing is more stressful than a job search. JobGenie is my attempt to give every candidate access to the kind of career intelligence that was previously locked behind expensive coaches.
 
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=flat&logo=linkedin)](https://www.linkedin.com/in/)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=flat&logo=linkedin)](https://linkedin.com/in/utkarsh-kapoor-618256203)
 [![HuggingFace](https://img.shields.io/badge/HuggingFace-Profile-orange?style=flat)](https://huggingface.co/Utkarsh94123)
 
 ---
