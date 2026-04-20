@@ -1,0 +1,14 @@
+chainlit==2.5.5
+langchain==0.3.14
+langchain-core==0.3.33
+langchain-community==0.3.14
+langchain-groq==0.2.4
+langchain-huggingface==0.1.2
+pinecone>=5.4.0
+sentence-transformers==2.7.0
+python-dotenv==1.0.1
+tiktoken==0.8.0
+pypdf2
+pymupdf
+numpy==1.26.4
+websockets
