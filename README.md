@@ -1,3 +1,14 @@
+---
+title: JobGenie RAG Assistant
+emoji: 🧞
+colorFrom: purple
+colorTo: pink
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+---
+
 # JobGenie RAG Assistant
 
 An AI-powered career co-pilot that analyzes your resume against any job description, generating skill gap reports, 60-second pitches, interview question predictions, and confidence scores in real time.
