@@ -102,15 +102,26 @@ def search_jobs(
 
     try:
         resp = requests.get(JSEARCH_URL, params=params, headers=headers, timeout=15)
+        print(f"[job_search] JSearch HTTP status: {resp.status_code}")
+        print(f"[job_search] JSearch raw response (first 500 chars): {resp.text[:500]}")
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
         print(f"[job_search] JSearch request failed: {e}")
         return []
 
-    raw_jobs = data.get("data", []) or data.get("jobs", []) or []
+    if not isinstance(data, dict):
+        print(f"[job_search] Unexpected response type: {type(data).__name__}, value: {str(data)[:300]}")
+        return []
+
+    raw_jobs = data.get("data") or data.get("jobs") or data.get("results") or []
+    if not isinstance(raw_jobs, list):
+        print(f"[job_search] 'jobs' field was not a list: {type(raw_jobs).__name__}")
+        raw_jobs = []
     jobs = []
     for item in raw_jobs:
+        if not isinstance(item, dict):
+            continue
         min_sal = item.get("job_min_salary")
         max_sal = item.get("job_max_salary")
 
