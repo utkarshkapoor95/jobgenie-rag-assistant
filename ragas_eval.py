@@ -17,7 +17,6 @@ Requirements:
 """
 
 import json
-import os
 import time
 from pathlib import Path
 
@@ -260,7 +259,7 @@ def run_evaluation():
     print("=" * 60)
     for metric, score in scores.items():
         print(f"  {metric:>25s}: {score:.4f}")
-    print(f"\nResults saved to: eval_results/ragas_scores.json")
+    print("\nResults saved to: eval_results/ragas_scores.json")
 
 
 def save_precomputed_results():
