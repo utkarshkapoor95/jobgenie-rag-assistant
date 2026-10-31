@@ -1,0 +1,95 @@
+{
+  "model": "llama-3.3-70b-versatile",
+  "provider": "Groq",
+  "embedding_model": "all-MiniLM-L6-v2",
+  "vector_db": "Pinecone (Serverless)",
+  "num_test_queries": 20,
+  "retrieval_top_k": 5,
+  "scores": {
+    "faithfulness": 0.8714,
+    "answer_relevancy": 0.8231,
+    "context_precision": 0.7908
+  },
+  "test_queries": [
+    {
+      "question": "What are my strongest skill matches for a Senior Data Analyst role?",
+      "ground_truth": "SQL, Python, Power BI, and stakeholder communication from MBA and operations background."
+    },
+    {
+      "question": "What skill gaps do I have for this role?",
+      "ground_truth": "Statistical modeling, A/B testing, Tableau, and cloud platform (AWS/GCP) hands-on experience."
+    },
+    {
+      "question": "Generate a 60-second pitch for this Data Analyst position.",
+      "ground_truth": "A pitch highlighting operations-to-data transition, MBA context, Python/SQL skills, and AI project portfolio."
+    },
+    {
+      "question": "What interview questions should I expect for this role?",
+      "ground_truth": "Technical SQL questions, behavioral questions about leadership and career transition, case studies on dashboard design."
+    },
+    {
+      "question": "What is my confidence score for this position?",
+      "ground_truth": "Moderate fit (65-75%) with strong communication and education, gaps in statistical modeling and cloud platforms."
+    },
+    {
+      "question": "How should I frame my operations background for a data role?",
+      "ground_truth": "Position operations as data-driven decision making: process metrics, team KPIs, cost optimization through analysis."
+    },
+    {
+      "question": "Which of my projects is most relevant to this JD?",
+      "ground_truth": "GTM Signal Engine (SQL + BigQuery + dashboards) and JobGenie RAG Assistant (Python + LangChain)."
+    },
+    {
+      "question": "What salary should I negotiate for this role?",
+      "ground_truth": "Target 12-14 LPA given MBA + operations experience but limited direct data analyst experience. JD range is 12-18 LPA."
+    },
+    {
+      "question": "How does my MBA help for this specific position?",
+      "ground_truth": "MBA adds stakeholder communication, business context for analytics, and the MBA or equivalent is a plus requirement match."
+    },
+    {
+      "question": "What should I learn before applying to strengthen my profile?",
+      "ground_truth": "Tableau (free public version), basic statistical modeling (regression, hypothesis testing), and AWS fundamentals."
+    },
+    {
+      "question": "Compare my fit for Data Analyst vs Business Analyst roles.",
+      "ground_truth": "Stronger fit for Business Analyst (operations + MBA + communication). Data Analyst needs deeper SQL and statistics."
+    },
+    {
+      "question": "What behavioral questions will they ask about my career switch?",
+      "ground_truth": "Why the transition, how operations prepared you for data, a time you used data to solve a business problem."
+    },
+    {
+      "question": "Is my Python skill level sufficient for this role?",
+      "ground_truth": "Partially. Integration-level Python (APIs, data transformation) covers basics, but role may need pandas/numpy for analysis."
+    },
+    {
+      "question": "What makes me stand out compared to typical applicants?",
+      "ground_truth": "Unique combination of operations domain knowledge + AI project portfolio (RAG, multi-agent systems) + MBA."
+    },
+    {
+      "question": "How should I explain the RAG project in an interview?",
+      "ground_truth": "Describe the end-to-end pipeline: PDF parsing, chunking, vector embeddings, semantic retrieval, LLM generation."
+    },
+    {
+      "question": "What cloud experience can I claim from my projects?",
+      "ground_truth": "BigQuery (GCP) from GTM Signal Engine, HuggingFace Spaces deployment, DigitalOcean VPS for AgentHive."
+    },
+    {
+      "question": "Should I mention my AI automation agency in the interview?",
+      "ground_truth": "Yes, briefly. It shows entrepreneurship, client-facing skills, and real-world application of technical skills."
+    },
+    {
+      "question": "What is the biggest red flag in my profile for this role?",
+      "ground_truth": "No prior Data Analyst job title. Operations background is adjacent but not direct."
+    },
+    {
+      "question": "How do I answer Tell me about yourself for this role?",
+      "ground_truth": "Start with current status (MBA student), bridge operations experience to data skills, highlight relevant projects."
+    },
+    {
+      "question": "Rate my certifications relevance for this Data Analyst position.",
+      "ground_truth": "AWS Cloud Practitioner is directly relevant. IBM AI Agents and Microsoft GTM are tangential but show continuous learning."
+    }
+  ]
+}
