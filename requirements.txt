@@ -11,6 +11,7 @@ tiktoken==0.8.0
 pypdf2
 pymupdf
 numpy==1.26.4
+pyarrow==16.1.0
 websockets
 ragas>=0.1.0
 datasets>=2.14.0
