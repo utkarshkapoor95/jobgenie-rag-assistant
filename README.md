@@ -45,12 +45,21 @@ Upload your resume (PDF), paste any job description, and get your full career in
 
 | Feature | What It Does |
 |---|---|
-| **Skill Gap Analysis** | Compares your resume against the JD. Highlights matches, gaps, and how to reframe transferable experience |
+| **Find Matching Jobs** | Live job search via Adzuna (19 countries). Scores every result against your resume, shows a fit percentage per job, apply links, and aggregates the skills most commonly missing across all results, with learning links for each |
+| **Skill Gap Analysis** | Compares your resume against a pasted JD. Highlights matches, gaps, and how to reframe transferable experience |
 | **60-Second Pitch** | Generates a personalized elevator pitch tailored to the specific role and company |
 | **Interview Predictor** | Predicts 10 likely interview questions (technical, behavioral, situational) with answer frameworks |
 | **Multi-JD Comparison** | Side-by-side comparison of up to 3 JDs with match percentages and a best-fit recommendation |
 | **Confidence Score** | Numeric readiness score broken down by technical skills, experience, education, and portfolio match |
 | **Q&A Mode** | Free-form questions about your profile: salary expectations, career switch framing, skill positioning |
+
+### Find Matching Jobs: how it works
+
+1. Upload your resume
+2. Answer four questions: job title, country, city, salary expectation
+3. The app pulls live listings from Adzuna and scores each one against your resume (fit %, matched skills, missing skills)
+4. Results are ranked by fit, each with a direct apply link
+5. Across all returned jobs, the app aggregates which skills come up missing most often ("missing in 6 of 10 listings") and generates a learning-search link (YouTube, freeCodeCamp, Coursera) for each — reverse-engineering what the market is actually asking for, not just one job at a time
 
 ---
 
@@ -205,15 +214,20 @@ GROQ_API_KEY=your_groq_api_key
 PINECONE_API_KEY=your_pinecone_api_key
 PINECONE_INDEX_NAME=jobgenie-index
 HF_TOKEN=your_huggingface_token    # Only needed for HuggingFace Spaces deployment
+ADZUNA_APP_ID=your_adzuna_app_id   # Required for Find Matching Jobs
+ADZUNA_APP_KEY=your_adzuna_app_key # Required for Find Matching Jobs
 ```
 
 All APIs used are **free tier** with no credit card required.
 
 | Service | Free Tier Limit | Enough For This Project? |
 |---|---|---|
-| Groq | 30 req/min, 1,000 req/day on LLaMA 3.3 70B | Yes (portfolio demo) |
+| Groq (`openai/gpt-oss-120b`) | 30 req/min, 1,000 req/day, 200K tokens/day | Yes (portfolio demo) |
 | Pinecone | 2 GB storage, 1M reads/month, 5 indexes | Yes (resume chunks are tiny) |
+| Adzuna | ~1,000 calls/month, 25 req/min | Yes (one search = one call per session) |
 | HuggingFace Spaces | Free CPU-basic Docker hosting | Yes (sleeps when idle) |
+
+> **Note:** Groq retired `llama-3.3-70b-versatile` on August 16, 2026. This project uses `openai/gpt-oss-120b`, Groq's recommended replacement with the same free-tier shape and a higher daily token cap.
 
 ---
 
@@ -253,7 +267,7 @@ Every push to `main` triggers:
 
 **Utkarsh Kapoor** | AI & Marketing Automation
 
-MBA candidate building intelligent business workflows using n8n, LLM APIs, and Python.
+MBA candidate building intelligent business workflows using n8n, LLM APIs, and Python. This is one of six portfolio projects demonstrating RAG, multi-agent orchestration, and production automation skills.
 
 [![Portfolio](https://img.shields.io/badge/Portfolio-autothynk.com-blue?style=flat)](https://autothynk.com)
 [![GitHub](https://img.shields.io/badge/GitHub-utkarshkapoor95-181717?style=flat&logo=github)](https://github.com/utkarshkapoor95)

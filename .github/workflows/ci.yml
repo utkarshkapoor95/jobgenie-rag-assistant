@@ -21,7 +21,7 @@ jobs:
         run: pip install ruff
 
       - name: Run Ruff linter
-        run: ruff check ragas_eval.py --select E,F,I --ignore E501
+        run: ruff check ragas_eval.py app.py rag_pipeline.py job_search.py --select E,F,I --ignore E501
 
   verify-imports:
     name: Verify Dependencies
@@ -44,6 +44,7 @@ jobs:
           python -c "import langchain_groq; print('langchain_groq OK')"
           python -c "from sentence_transformers import SentenceTransformer; print('sentence_transformers OK')"
           python -c "import ragas; print('ragas OK')"
+          python -c "import requests; print('requests OK')"
 
   docker-build:
     name: Docker Build

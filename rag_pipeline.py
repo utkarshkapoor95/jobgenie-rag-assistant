@@ -1,14 +1,15 @@
 """
-rag_pipeline.py — JobGenie RAG Pipeline
+rag_pipeline.py - JobGenie RAG Pipeline
 All functions called by app.py are defined here.
 """
 
-import os
 import json
+import os
+
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_groq import ChatGroq
 from pinecone import Pinecone, ServerlessSpec
 
 load_dotenv()
@@ -22,7 +23,10 @@ _resume_context = ""   # in-memory fallback when Pinecone not ready
 
 INDEX_NAME = "jobgenie-index"
 EMBED_DIM  = 384        # all-MiniLM-L6-v2 dimension
-GROQ_MODEL = "llama-3.3-70b-versatile"
+# NOTE: llama-3.3-70b-versatile was retired by Groq on 2026-08-16.
+# openai/gpt-oss-120b is Groq's recommended replacement: same free tier
+# shape (30 RPM, 1,000 req/day), actually higher daily token cap (200K vs 100K).
+GROQ_MODEL = "openai/gpt-oss-120b"
 
 
 # ── Lazy initializers ──────────────────────────────────────────────────────
