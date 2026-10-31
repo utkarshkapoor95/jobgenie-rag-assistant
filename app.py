@@ -124,8 +124,8 @@ def format_job_search_results(results: dict, job_title: str, city: str, country_
             output += f"**You have:** {', '.join(matched[:5])}\n\n"
         if missing:
             output += f"**Missing:** {', '.join(missing[:5])}\n\n"
-        if job.get("redirect_url"):
-            output += f"[**Apply Here**]({job['redirect_url']})\n\n"
+        if job.get("apply_link"):
+            output += f"[**Apply Here**]({job['apply_link']})\n\n"
         output += "---\n\n"
 
     missing_summary = results.get("missing_skills_summary", [])
@@ -338,7 +338,7 @@ async def on_jobsearch(action: cl.Action):
 
     output_md = format_job_search_results(results, job_title, city, country_name)
     if results.get("jobs"):
-        output_md += "\n\n*Job listings powered by [Adzuna](https://www.adzuna.com/)*"
+        output_md += "\n\n*Job listings powered by [JSearch](https://www.openwebninja.com/api/jsearch)*"
     await cl.Message(content=output_md).send()
 
     await cl.Message(
