@@ -1,0 +1,11 @@
+.git
+.github
+.env
+__pycache__
+*.pyc
+.venv
+venv
+.DS_Store
+eval_results
+*.md
+!README.md
