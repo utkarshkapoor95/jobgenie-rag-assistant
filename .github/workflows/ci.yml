@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint (Ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff linter
+        run: ruff check . --select E,F,I --ignore E501
+
+  verify-imports:
+    name: Verify Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify core imports
+        run: |
+          python -c "import chainlit; print('chainlit OK')"
+          python -c "import langchain; print('langchain OK')"
+          python -c "import pinecone; print('pinecone OK')"
+          python -c "import langchain_groq; print('langchain_groq OK')"
+          python -c "from sentence_transformers import SentenceTransformer; print('sentence_transformers OK')"
+          python -c "import ragas; print('ragas OK')"
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t jobgenie-rag-assistant .
+
+      - name: Verify image
+        run: docker images jobgenie-rag-assistant
