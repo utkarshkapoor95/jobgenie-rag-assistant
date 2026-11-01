@@ -19,6 +19,12 @@ Pipeline:
 Requires JSEARCH_API_KEY. Register free, no credit card, at
 https://app.openwebninja.com/signup, then subscribe to the Free plan for
 the JSearch API specifically at https://app.openwebninja.com/api/jsearch.
+
+CONFIRMED response shape from live testing (2026-11-02):
+{"status": "OK", "data": {"jobs": [...]}}
+The jobs list sits two levels deep: response["data"]["jobs"]. An earlier
+version of this file read response["data"] directly, which is a dict
+(not a list) and silently produced zero results on every search.
 """
 
 import json
@@ -89,10 +95,19 @@ def search_jobs(
         print(f"[job_search] Unexpected response type: {type(data).__name__}, value: {str(data)[:300]}")
         return []
 
-    # CONFIRMED response shape from live testing:
-    # {"data": {"jobs": [...]}}
-    # The jobs list is nested one level deeper than typical docs suggest.
-    raw_jobs = data.get("data") or data.get("jobs") or data.get("results") or []
+    # CONFIRMED response shape from live testing (2026-11-02):
+    # {"status": "OK", "data": {"jobs": [...]}}
+    # The jobs list is nested TWO levels deep: data["data"]["jobs"], not
+    # data["data"] directly. The previous version grabbed data["data"] itself
+    # (a dict, not a list), which silently produced zero results every time.
+    raw_container = data.get("data")
+    if isinstance(raw_container, dict):
+        raw_jobs = raw_container.get("jobs", [])
+    elif isinstance(raw_container, list):
+        raw_jobs = raw_container
+    else:
+        raw_jobs = data.get("jobs") or data.get("results") or []
+
     if not isinstance(raw_jobs, list):
         print(f"[job_search] 'jobs' field was not a list: {type(raw_jobs).__name__}")
         raw_jobs = []
