@@ -1,6 +1,6 @@
 """
 rag_pipeline.py - JobGenie RAG Pipeline
-All functions called by app.py are defined here.
+All RAG functions called by app.py are defined here.
 """
 
 import json
@@ -12,6 +12,20 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from pinecone import Pinecone, ServerlessSpec
 
+from config import (
+    EMBED_DIM,
+    EMBED_MODEL,
+    GROQ_MODEL,
+    PINECONE_INDEX_NAME,
+    PROMPT_COMPARE_JD,
+    PROMPT_CONFIDENCE,
+    PROMPT_PARSE_JD,
+    PROMPT_PITCH,
+    PROMPT_QUESTIONS,
+    PROMPT_SKILL_GAP,
+    PROMPT_SUGGEST_TITLES,
+)
+
 load_dotenv()
 
 # ── Globals ────────────────────────────────────────────────────────────────
@@ -21,22 +35,13 @@ _embedder = None
 _llm = None
 _resume_context = ""   # in-memory fallback when Pinecone not ready
 
-INDEX_NAME = "jobgenie-index"
-EMBED_DIM  = 384        # all-MiniLM-L6-v2 dimension
-# NOTE: llama-3.3-70b-versatile was retired by Groq on 2026-08-16.
-# openai/gpt-oss-120b is Groq's recommended replacement: same free tier
-# shape (30 RPM, 1,000 req/day), actually higher daily token cap (200K vs 100K).
-GROQ_MODEL = "openai/gpt-oss-120b"
-
 
 # ── Lazy initializers ──────────────────────────────────────────────────────
 
 def _get_embedder():
     global _embedder
     if _embedder is None:
-        _embedder = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
+        _embedder = HuggingFaceEmbeddings(model_name=EMBED_MODEL)
     return _embedder
 
 
@@ -59,19 +64,19 @@ def _get_index():
 
     api_key = os.environ.get("PINECONE_API_KEY", "")
     if not api_key:
-        return None  # graceful degradation — use in-memory fallback
+        return None  # graceful degradation: use in-memory fallback
 
     try:
         _pc = Pinecone(api_key=api_key)
         existing = [i.name for i in _pc.list_indexes()]
-        if INDEX_NAME not in existing:
+        if PINECONE_INDEX_NAME not in existing:
             _pc.create_index(
-                name=INDEX_NAME,
+                name=PINECONE_INDEX_NAME,
                 dimension=EMBED_DIM,
                 metric="cosine",
                 spec=ServerlessSpec(cloud="aws", region="us-east-1"),
             )
-        _index = _pc.Index(INDEX_NAME)
+        _index = _pc.Index(PINECONE_INDEX_NAME)
     except Exception as e:
         print(f"[Pinecone] Could not connect: {e}")
         _index = None
@@ -96,7 +101,7 @@ def ingest_resume_text(resume_text: str) -> None:
     chunks = splitter.split_text(resume_text)
 
     if index is None:
-        print("[ingest] Pinecone unavailable — using in-memory context only.")
+        print("[ingest] Pinecone unavailable, using in-memory context only.")
         return
 
     try:
@@ -146,35 +151,49 @@ def _call_llm(prompt: str) -> str:
         return f"LLM error: {str(e)}"
 
 
-# ── Feature Functions ──────────────────────────────────────────────────────
-
-def parse_jd(jd_text: str) -> dict:
-    """
-    Extract structured fields from a raw JD string.
-    Returns a dict with keys: JOB_TITLE, COMPANY, EXPERIENCE, TECHNICAL_SKILLS, SOFT_SKILLS.
-    """
-    prompt = f"""Extract the following fields from the job description below.
-Reply ONLY with valid JSON — no explanation, no markdown, no backticks.
-
-Fields to extract:
-- JOB_TITLE
-- COMPANY
-- EXPERIENCE (e.g. "2-4 years")
-- TECHNICAL_SKILLS (comma-separated list)
-- SOFT_SKILLS (comma-separated list)
-
-Job Description:
-{jd_text[:3000]}
-
-Reply with JSON only:"""
-
-    raw = _call_llm(prompt)
+def _clean_json_response(raw: str) -> str:
+    """Strip markdown fences from LLM JSON responses."""
     raw = raw.strip()
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
             raw = raw[4:]
-    raw = raw.strip()
+    return raw.strip()
+
+
+# ── Feature Functions ──────────────────────────────────────────────────────
+
+def suggest_job_titles(resume_text: str) -> list[str]:
+    """
+    Analyze resume text and return 3 recommended job titles.
+    Uses a dedicated Groq call to extract suitable roles from the resume content.
+    Falls back to generic titles if parsing fails.
+    """
+    prompt = PROMPT_SUGGEST_TITLES.format(resume_text=resume_text[:3000])
+    raw = _call_llm(prompt)
+    raw = _clean_json_response(raw)
+
+    try:
+        result = json.loads(raw)
+        titles = result.get("titles", [])
+        if isinstance(titles, list) and len(titles) >= 3:
+            return titles[:3]
+    except Exception:
+        pass
+
+    # Fallback: return safe generic titles
+    return ["Data Analyst", "Business Analyst", "Marketing Automation Specialist"]
+
+
+def parse_jd(jd_text: str) -> dict:
+    """
+    Extract structured fields from a raw JD string.
+    Returns a dict with keys: JOB_TITLE, COMPANY, EXPERIENCE,
+    TECHNICAL_SKILLS, SOFT_SKILLS.
+    """
+    prompt = PROMPT_PARSE_JD.format(jd_text=jd_text[:3000])
+    raw = _call_llm(prompt)
+    raw = _clean_json_response(raw)
 
     try:
         return json.loads(raw)
@@ -191,106 +210,28 @@ Reply with JSON only:"""
 def analyze_skill_gap(jd_text: str) -> str:
     """RAG-powered skill gap analysis comparing JD requirements vs resume."""
     context = _retrieve_context(jd_text)
-    prompt = f"""You are JobGenie, a career advisor specializing in the Indian job market.
-
-Candidate's background (from resume):
-{context}
-
-Job Description:
-{jd_text[:2000]}
-
-Provide a structured skill gap analysis with these exact sections:
-
-### MATCHES — Skills the candidate already has
-(List 4-6 specific matches with brief explanation of relevance)
-
-### GAPS — Skills the JD requires that the candidate lacks
-(List 3-5 gaps honestly)
-
-### REFRAME — How to position Operations experience as a strength
-(For each gap, suggest how ops background partially covers it or how to present it)
-
-### ACTION ITEMS — Top 2-3 things to do before applying
-(Specific, actionable steps)
-
-Be honest, specific, and practical. Mention actual skills from the resume."""
-
+    prompt = PROMPT_SKILL_GAP.format(context=context, jd_text=jd_text[:2000])
     return _call_llm(prompt)
 
 
 def generate_pitch(jd_text: str) -> str:
     """Generate a tailored 60-second elevator pitch."""
     context = _retrieve_context(jd_text)
-    prompt = f"""You are JobGenie. Write a tailored "Tell me about yourself" pitch for this candidate.
-
-Candidate's background:
-{context}
-
-Target Job Description:
-{jd_text[:1500]}
-
-Requirements:
-- Exactly 150-180 words
-- Start with current status (MBA student transitioning from Operations to Data/AI)
-- Mention 2-3 specific skills or projects that match THIS JD
-- End with why this specific role excites them
-- Tone: confident, professional, natural (not robotic)
-- Frame the Operations to AI transition as intentional career evolution
-- Suitable for the Indian startup/tech job market
-
-Write ONLY the pitch — no instructions, no labels, no preamble."""
-
+    prompt = PROMPT_PITCH.format(context=context, jd_text=jd_text[:1500])
     return _call_llm(prompt)
 
 
 def predict_questions(jd_text: str) -> str:
     """Predict 10 likely interview questions with answer frameworks."""
     context = _retrieve_context(jd_text)
-    prompt = f"""You are JobGenie. Based on this JD and candidate background, predict 10 interview questions.
-
-Candidate's background:
-{context}
-
-Job Description:
-{jd_text[:1500]}
-
-Format EXACTLY like this for each question:
-
-**Q1 [Technical]: [Question]**
-> Framework: [How to answer using the candidate's actual experience — be specific]
-
-Include:
-- 3-4 Technical questions (based on skills in the JD)
-- 3-4 Behavioral questions (leadership, teamwork, conflict, failure)
-- 2-3 Situational/Case questions (problem-solving scenarios)
-
-Be specific to THIS JD and THIS candidate's background."""
-
+    prompt = PROMPT_QUESTIONS.format(context=context, jd_text=jd_text[:1500])
     return _call_llm(prompt)
 
 
 def calculate_confidence(jd_text: str) -> str:
     """Calculate readiness score across 5 dimensions."""
     context = _retrieve_context(jd_text)
-    prompt = f"""You are JobGenie. Score this candidate's readiness for the job on a scale of 0-100%.
-
-Candidate's background:
-{context}
-
-Job Description:
-{jd_text[:1500]}
-
-Reply in EXACTLY this format:
-
-Technical Skills Match: [0-100]%
-Experience Relevance: [0-100]%
-Education Fit: [0-100]%
-Project Portfolio Match: [0-100]%
-Overall Confidence: [0-100]%
-SUMMARY: [2-sentence honest assessment — what's strong and what needs work]
-
-Be realistic. Don't inflate scores."""
-
+    prompt = PROMPT_CONFIDENCE.format(context=context, jd_text=jd_text[:1500])
     return _call_llm(prompt)
 
 
@@ -303,32 +244,10 @@ def compare_jds(jd_list: list) -> list:
     for jd_text in jd_list:
         context = _retrieve_context(jd_text)
         parsed = parse_jd(jd_text)
-        prompt = f"""You are JobGenie. Evaluate this candidate's fit for the job.
-
-Candidate background:
-{context}
-
-Job Description:
-{jd_text[:1500]}
-
-Reply ONLY with valid JSON (no markdown, no backticks):
-{{
-  "JOB_TITLE": "...",
-  "COMPANY": "...",
-  "match_pct": 75,
-  "top_skills": ["skill1", "skill2", "skill3"],
-  "top_gaps": ["gap1", "gap2"],
-  "difficulty": "Medium",
-  "recommendation": "2-sentence recommendation"
-}}"""
+        prompt = PROMPT_COMPARE_JD.format(context=context, jd_text=jd_text[:1500])
 
         raw = _call_llm(prompt)
-        raw = raw.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        raw = raw.strip()
+        raw = _clean_json_response(raw)
 
         try:
             result = json.loads(raw)

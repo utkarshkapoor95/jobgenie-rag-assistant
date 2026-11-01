@@ -21,7 +21,7 @@ jobs:
         run: pip install ruff
 
       - name: Run Ruff linter
-        run: ruff check ragas_eval.py app.py rag_pipeline.py job_search.py --select E,F,I --ignore E501
+        run: ruff check ragas_eval.py app.py rag_pipeline.py job_search.py config.py --select E,F,I --ignore E501
 
   verify-imports:
     name: Verify Dependencies

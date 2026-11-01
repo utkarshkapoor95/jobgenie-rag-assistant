@@ -1,11 +1,27 @@
+"""
+app.py - JobGenie RAG Assistant (Chainlit UI)
+
+New flow (Nov 2026 redesign):
+1. User uploads resume PDF
+2. "Processing your resume..." spinner shown during embedding
+3. Resume analyzed via Groq -> 3 AI-recommended job titles shown as buttons + "Other"
+4. User picks a title (one click) or types custom
+5. Country selection (buttons)
+6. City input (free text)
+7. Job search runs, results shown ranked with fit scores
+8. Secondary options shown below results: "Analyze a JD", "Compare JDs", "Ask About Profile"
+"""
+
 import chainlit as cl
 from dotenv import load_dotenv
 
-from job_search import (
-    INDIA_SALARY_BRACKETS,
+from config import (
+    GROQ_MODEL,
+    PROMPT_QA,
+    SKILL_KEYWORDS,
     SUPPORTED_COUNTRIES,
-    run_job_search_pipeline,
 )
+from job_search import run_job_search_pipeline
 from rag_pipeline import (
     analyze_skill_gap,
     calculate_confidence,
@@ -14,12 +30,16 @@ from rag_pipeline import (
     ingest_resume_text,
     parse_jd,
     predict_questions,
+    suggest_job_titles,
 )
 
 load_dotenv()
 
 
+# ── Helpers ────────────────────────────────────────────────────────────────
+
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    """Extract text from PDF bytes. Tries PyMuPDF first, falls back to pypdf."""
     try:
         import fitz
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -30,7 +50,6 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
         return text.strip()
     except Exception:
         import io
-
         import pypdf
         reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
         text = ""
@@ -40,6 +59,7 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
 
 
 def format_confidence(raw: str) -> str:
+    """Format the readiness score into a visual bar chart."""
     lines = raw.strip().split("\n")
     output = "### Readiness Score Dashboard\n\n"
     for line in lines:
@@ -48,7 +68,7 @@ def format_confidence(raw: str) -> str:
             value = value.strip()
             try:
                 pct = int(value.replace("%", "").strip())
-                bars = "█" * (pct // 10) + "░" * (10 - pct // 10)
+                bars = "\u2588" * (pct // 10) + "\u2591" * (10 - pct // 10)
                 output += f"**{key.strip()}**: `{bars}` {pct}%\n\n"
             except Exception:
                 output += f"**{key.strip()}**: {value}\n\n"
@@ -58,6 +78,7 @@ def format_confidence(raw: str) -> str:
 
 
 def format_comparison_md(jobs: list) -> str:
+    """Format multi-JD comparison as a markdown table."""
     if not jobs:
         return "No results to compare."
     best_idx = max(range(len(jobs)), key=lambda i: jobs[i].get("match_pct", 0))
@@ -101,7 +122,7 @@ def format_job_search_results(results: dict, job_title: str, city: str, country_
 
     for i, job in enumerate(jobs, 1):
         fit = job.get("fit_score", 0)
-        bars = "█" * (fit // 10) + "░" * (10 - fit // 10)
+        bars = "\u2588" * (fit // 10) + "\u2591" * (10 - fit // 10)
         salary_line = ""
         if job.get("salary_min") or job.get("salary_max"):
             smin = job.get("salary_min")
@@ -149,6 +170,68 @@ def format_job_search_results(results: dict, job_title: str, city: str, country_
     return output
 
 
+# ── Job Search Flow (the primary path) ─────────────────────────────────────
+
+async def run_job_search_flow(resume_text: str, job_title: str):
+    """
+    Handles the flow after a job title is selected:
+    country -> city -> search -> results -> secondary options.
+    """
+    # ── Country selection ──
+    country_actions = [
+        cl.Action(name="country_pick", payload={"code": code}, label=name)
+        for code, name in SUPPORTED_COUNTRIES.items()
+    ]
+    country_res = await cl.AskActionMessage(
+        content="Which country are you targeting?",
+        actions=country_actions,
+        timeout=120,
+    ).send()
+    if not country_res:
+        await cl.Message(content="No response received. Please start a new chat to try again.").send()
+        return
+    country_code = country_res.get("payload", {}).get("code", "in")
+    country_name = SUPPORTED_COUNTRIES.get(country_code, "India")
+
+    # ── City input ──
+    city_res = await cl.AskUserMessage(
+        content=f"Which city in {country_name}? (type \"any\" for no preference)",
+        timeout=120,
+    ).send()
+    if not city_res:
+        await cl.Message(content="No response received. Please start a new chat to try again.").send()
+        return
+    city = city_res["output"].strip()
+
+    # ── Search + Score ──
+    async with cl.Step(name="Searching live job listings") as step:
+        results = run_job_search_pipeline(
+            resume_context=resume_text,
+            job_title=job_title,
+            country_code=country_code,
+            city=city,
+        )
+        step.output = f"Found {results.get('total_found', 0)} listings, scored top {len(results.get('jobs', []))}."
+
+    output_md = format_job_search_results(results, job_title, city, country_name)
+    if results.get("jobs"):
+        output_md += "\n\n*Job listings powered by [JSearch](https://www.openwebninja.com/api/jsearch)*"
+    await cl.Message(content=output_md).send()
+
+    # ── Secondary options after results ──
+    await cl.Message(
+        content="**What's next?**",
+        actions=[
+            cl.Action(name="restart_search", payload={"action": "restart"}, label="Search Again"),
+            cl.Action(name="mode_single", payload={"mode": "single"}, label="Analyze a Single JD"),
+            cl.Action(name="mode_compare", payload={"mode": "compare"}, label="Compare Multiple JDs"),
+            cl.Action(name="mode_qa", payload={"mode": "qa"}, label="Ask About My Profile"),
+        ],
+    ).send()
+
+
+# ── Chat Start ─────────────────────────────────────────────────────────────
+
 @cl.on_chat_start
 async def start():
     await cl.Message(
@@ -172,7 +255,8 @@ async def start():
 
     resume_file = files[0]
 
-    async with cl.Step(name="Processing your resume") as step:
+    # ── Processing with visible spinner ──
+    async with cl.Step(name="Processing your resume...") as step:
         try:
             with open(resume_file.path, "rb") as f:
                 pdf_bytes = f.read()
@@ -192,32 +276,93 @@ async def start():
             await cl.Message(content=f"Error processing resume: {str(e)}").send()
             return
 
-    skill_keywords = [
-        "SQL", "Python", "Power BI", "Excel", "LangChain", "Pinecone",
-        "Machine Learning", "Tableau", "Pandas", "NumPy", "RAG", "LLM"
-    ]
-    skills_found = [s for s in skill_keywords if s.lower() in resume_text.lower()]
+    # ── Quick skill detection for confirmation ──
+    skills_found = [s for s in SKILL_KEYWORDS if s.lower() in resume_text.lower()]
     skills_display = " - ".join(skills_found[:6]) if skills_found else "Skills detected"
     first_line = resume_text.strip().split("\n")[0].strip()
     name_line = f" - **{first_line}**" if len(first_line) < 40 else ""
 
-    cl.user_session.set("mode", "single")
+    # Initialize session state
+    cl.user_session.set("mode", "jobsearch")
     cl.user_session.set("compare_jds_list", [])
     cl.user_session.set("compare_mode_active", False)
 
     await cl.Message(
         content=(
             f"---\n**Resume saved{name_line}**\n"
-            f"Detected: `{skills_display}`\n\n---\n\n"
-            "**What would you like to do?**\n\n"
-            "Click a button below or paste a JD directly:"
+            f"Detected: `{skills_display}`\n\n---"
+        )
+    ).send()
+
+    # ── AI-recommended job titles ──
+    async with cl.Step(name="Analyzing your resume for job matches...") as step:
+        suggested_titles = suggest_job_titles(resume_text)
+        step.output = f"Suggested: {', '.join(suggested_titles)}"
+
+    title_actions = [
+        cl.Action(name="title_pick", payload={"title": title}, label=title)
+        for title in suggested_titles
+    ]
+    title_actions.append(
+        cl.Action(name="title_other", payload={"title": "other"}, label="Other (type your own)")
+    )
+
+    await cl.Message(
+        content=(
+            "**Based on your resume, here are the best-fit job titles.**\n\n"
+            "Pick one to start searching, or type your own:"
         ),
-        actions=[
-            cl.Action(name="mode_jobsearch", payload={"mode": "jobsearch"}, label="Find Matching Jobs"),
-            cl.Action(name="mode_single",  payload={"mode": "single"},  label="Analyze a Single JD"),
-            cl.Action(name="mode_compare", payload={"mode": "compare"}, label="Compare Multiple JDs"),
-            cl.Action(name="mode_qa",      payload={"mode": "qa"},      label="Ask About My Profile"),
-        ],
+        actions=title_actions,
+    ).send()
+
+
+# ── Title Selection Callbacks ──────────────────────────────────────────────
+
+@cl.action_callback("title_pick")
+async def on_title_pick(action: cl.Action):
+    """User clicked one of the AI-suggested titles."""
+    job_title = action.payload.get("title", "Data Analyst")
+    resume_text = cl.user_session.get("resume_text", "")
+    await cl.Message(content=f"Searching for **{job_title}** roles...").send()
+    await run_job_search_flow(resume_text, job_title)
+
+
+@cl.action_callback("title_other")
+async def on_title_other(action: cl.Action):
+    """User wants to type a custom job title."""
+    title_res = await cl.AskUserMessage(
+        content="What job title or role are you targeting? (e.g. \"Data Analyst\", \"GTM Engineer\")",
+        timeout=120,
+    ).send()
+    if not title_res:
+        await cl.Message(content="No response received. Please start a new chat to try again.").send()
+        return
+    job_title = title_res["output"].strip()
+    resume_text = cl.user_session.get("resume_text", "")
+    await cl.Message(content=f"Searching for **{job_title}** roles...").send()
+    await run_job_search_flow(resume_text, job_title)
+
+
+# ── Secondary Mode Callbacks ──────────────────────────────────────────────
+
+@cl.action_callback("restart_search")
+async def on_restart_search(action: cl.Action):
+    """User wants to search again with a different title."""
+    resume_text = cl.user_session.get("resume_text", "")
+    async with cl.Step(name="Analyzing resume...") as step:
+        suggested_titles = suggest_job_titles(resume_text)
+        step.output = f"Suggested: {', '.join(suggested_titles)}"
+
+    title_actions = [
+        cl.Action(name="title_pick", payload={"title": title}, label=title)
+        for title in suggested_titles
+    ]
+    title_actions.append(
+        cl.Action(name="title_other", payload={"title": "other"}, label="Other (type your own)")
+    )
+    await cl.Message(
+        content="Pick a job title or type your own:",
+        actions=title_actions,
     ).send()
 
 
@@ -225,7 +370,9 @@ async def start():
 async def on_single(action: cl.Action):
     cl.user_session.set("mode", "single")
     cl.user_session.set("compare_mode_active", False)
-    await cl.Message(content="**Single JD mode active.**\n\nPaste any Job Description below and I'll give you the full analysis.").send()
+    await cl.Message(
+        content="**Single JD mode active.**\n\nPaste any Job Description below and I'll give you the full analysis."
+    ).send()
 
 
 @cl.action_callback("mode_compare")
@@ -255,100 +402,7 @@ async def on_qa(action: cl.Action):
     ).send()
 
 
-@cl.action_callback("mode_jobsearch")
-async def on_jobsearch(action: cl.Action):
-    """
-    Runs the 5-question job search flow:
-    job title -> country -> city -> salary -> search + score + aggregate.
-    """
-    resume_text = cl.user_session.get("resume_text", "")
-
-    title_res = await cl.AskUserMessage(
-        content="What job title or role are you targeting? (e.g. \"Data Analyst\", \"GTM Engineer\")",
-        timeout=120,
-    ).send()
-    if not title_res:
-        await cl.Message(content="No response received. Click **Find Matching Jobs** to try again.").send()
-        return
-    job_title = title_res["output"].strip()
-
-    country_actions = [
-        cl.Action(name="country_pick", payload={"code": code}, label=f"{name}")
-        for code, name in SUPPORTED_COUNTRIES.items()
-    ]
-    country_res = await cl.AskActionMessage(
-        content="Which country are you targeting?",
-        actions=country_actions,
-        timeout=120,
-    ).send()
-    if not country_res:
-        await cl.Message(content="No response received. Click **Find Matching Jobs** to try again.").send()
-        return
-    country_code = country_res.get("payload", {}).get("code", "in")
-    country_name = SUPPORTED_COUNTRIES.get(country_code, "India")
-
-    city_res = await cl.AskUserMessage(
-        content=f"Which city in {country_name}? (type \"any\" for no preference)",
-        timeout=120,
-    ).send()
-    if not city_res:
-        await cl.Message(content="No response received. Click **Find Matching Jobs** to try again.").send()
-        return
-    city = city_res["output"].strip()
-
-    salary_min = None
-    if country_code == "in":
-        bracket_actions = [
-            cl.Action(name="salary_pick", payload={"value": str(v) if v else ""}, label=k)
-            for k, v in INDIA_SALARY_BRACKETS.items()
-        ]
-        salary_res = await cl.AskActionMessage(
-            content="What's your salary expectation?",
-            actions=bracket_actions,
-            timeout=120,
-        ).send()
-        if salary_res:
-            val = salary_res.get("payload", {}).get("value", "")
-            salary_min = int(val) if val else None
-    else:
-        salary_res = await cl.AskUserMessage(
-            content=(
-                "Minimum annual salary in local currency? "
-                "(type a number, or \"skip\" for no preference)"
-            ),
-            timeout=120,
-        ).send()
-        if salary_res:
-            raw = salary_res["output"].strip().lower()
-            if raw not in ("skip", "", "no preference", "any"):
-                try:
-                    salary_min = int("".join(c for c in raw if c.isdigit()))
-                except Exception:
-                    salary_min = None
-
-    async with cl.Step(name="Searching live job listings") as step:
-        results = run_job_search_pipeline(
-            resume_context=resume_text,
-            job_title=job_title,
-            country_code=country_code,
-            city=city,
-            salary_min=salary_min,
-        )
-        step.output = f"Found {results.get('total_found', 0)} listings, scored top {len(results.get('jobs', []))}."
-
-    output_md = format_job_search_results(results, job_title, city, country_name)
-    if results.get("jobs"):
-        output_md += "\n\n*Job listings powered by [JSearch](https://www.openwebninja.com/api/jsearch)*"
-    await cl.Message(content=output_md).send()
-
-    await cl.Message(
-        content="**Search complete!** What's next?",
-        actions=[
-            cl.Action(name="mode_jobsearch", payload={"mode": "jobsearch"}, label="Search Again"),
-            cl.Action(name="mode_qa",        payload={"mode": "qa"},       label="Ask About My Profile"),
-        ],
-    ).send()
-
+# ── Compare Mode Callbacks ─────────────────────────────────────────────────
 
 @cl.action_callback("add_another_jd")
 async def on_add_another(action: cl.Action):
@@ -381,11 +435,14 @@ async def on_run_comparison(action: cl.Action):
     await cl.Message(
         content="Comparison complete! What's next?",
         actions=[
+            cl.Action(name="restart_search", payload={"action": "restart"}, label="Search Again"),
             cl.Action(name="mode_compare", payload={"mode": "compare"}, label="Compare Again"),
-            cl.Action(name="mode_qa",      payload={"mode": "qa"},      label="Ask About My Profile"),
+            cl.Action(name="mode_qa", payload={"mode": "qa"}, label="Ask About My Profile"),
         ],
     ).send()
 
+
+# ── Message Handler ────────────────────────────────────────────────────────
 
 @cl.on_message
 async def on_message(message: cl.Message):
@@ -393,6 +450,7 @@ async def on_message(message: cl.Message):
     mode = cl.user_session.get("mode", "single")
     compare_active = cl.user_session.get("compare_mode_active", False)
 
+    # ── Compare mode: collecting JDs ──
     if compare_active:
         if len(jd_text.split()) < 30:
             await cl.Message(content="That looks too short for a JD. Please paste the full job description.").send()
@@ -404,15 +462,15 @@ async def on_message(message: cl.Message):
         count = len(jd_list)
 
         parsed = parse_jd(jd_text)
-        role    = parsed.get("JOB_TITLE", f"Role {count}")
+        role = parsed.get("JOB_TITLE", f"Role {count}")
         company = parsed.get("COMPANY", "Unknown")
 
         if count < 3:
             await cl.Message(
                 content=f"**JD {count} saved:** {role} at {company}\n\nAdd another or run comparison:",
                 actions=[
-                    cl.Action(name="add_another_jd", payload={"action": "add"},     label="Add Another JD"),
-                    cl.Action(name="run_comparison",  payload={"action": "compare"}, label=f"Run Comparison ({count} JDs)"),
+                    cl.Action(name="add_another_jd", payload={"action": "add"}, label="Add Another JD"),
+                    cl.Action(name="run_comparison", payload={"action": "compare"}, label=f"Run Comparison ({count} JDs)"),
                 ],
             ).send()
         else:
@@ -424,31 +482,29 @@ async def on_message(message: cl.Message):
             ).send()
         return
 
+    # ── Q&A mode ──
     if mode == "qa":
         from langchain_groq import ChatGroq
         resume_text = cl.user_session.get("resume_text", "")
-        llm = ChatGroq(model="openai/gpt-oss-120b", temperature=0.5)
-        response = llm.invoke(
-            f"You are JobGenie, a career assistant. Answer based on the candidate's resume.\n"
-            f"Be specific and practical for the Indian job market (salary in LPA).\n\n"
-            f"Resume:\n{resume_text[:3000]}\n\nQuestion: {jd_text}"
-        )
+        llm = ChatGroq(model=GROQ_MODEL, temperature=0.5)
+        prompt = PROMPT_QA.format(resume_text=resume_text[:3000], question=jd_text)
+        response = llm.invoke(prompt)
         await cl.Message(content=response.content).send()
         return
 
+    # ── Single JD analysis (default) ──
     if len(jd_text.split()) < 50:
         await cl.Message(
             content=(
                 "Please paste a complete Job Description (at least 50 words).\n\n"
-                "Or use **Find Matching Jobs** to search live listings, "
-                "or switch to **Ask About My Profile** for general questions."
+                "Or use the buttons above to search for jobs or ask questions about your profile."
             )
         ).send()
         return
 
     async with cl.Step(name="Parsing Job Description") as step:
-        parsed  = parse_jd(jd_text)
-        role    = parsed.get("JOB_TITLE", "N/A")
+        parsed = parse_jd(jd_text)
+        role = parsed.get("JOB_TITLE", "N/A")
         company = parsed.get("COMPANY", "N/A")
         step.output = f"Role: {role} at {company}"
 
@@ -490,8 +546,8 @@ async def on_message(message: cl.Message):
             "- *'What salary should I ask for this role?'*"
         ),
         actions=[
-            cl.Action(name="mode_jobsearch", payload={"mode": "jobsearch"}, label="Find Matching Jobs"),
+            cl.Action(name="restart_search", payload={"action": "restart"}, label="Find Matching Jobs"),
             cl.Action(name="mode_compare", payload={"mode": "compare"}, label="Compare Multiple JDs"),
-            cl.Action(name="mode_qa",      payload={"mode": "qa"},      label="Ask About My Profile"),
+            cl.Action(name="mode_qa", payload={"mode": "qa"}, label="Ask About My Profile"),
         ],
     ).send()

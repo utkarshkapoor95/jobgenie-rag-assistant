@@ -1,5 +1,5 @@
 {
-  "model": "llama-3.3-70b-versatile",
+  "model": "openai/gpt-oss-120b",
   "provider": "Groq",
   "embedding_model": "all-MiniLM-L6-v2",
   "vector_db": "Pinecone (Serverless)",

@@ -19,11 +19,6 @@ Pipeline:
 Requires JSEARCH_API_KEY. Register free, no credit card, at
 https://app.openwebninja.com/signup, then subscribe to the Free plan for
 the JSearch API specifically at https://app.openwebninja.com/api/jsearch.
-
-KNOWN LIMITATION: most job postings do not include salary data at all
-(confirmed in OpenWeb Ninja's own FAQ). salary_min filtering here is
-therefore best-effort: jobs with no salary data are still included rather
-than silently dropped, since excluding them would hide most results.
 """
 
 import json
@@ -33,43 +28,23 @@ import urllib.parse
 import requests
 from dotenv import load_dotenv
 
+from config import (
+    JSEARCH_URL,
+    MAX_JOBS_TO_SCORE,
+    PROMPT_SCORE_JOB,
+    SUPPORTED_COUNTRIES,
+)
 from rag_pipeline import _call_llm
 
 load_dotenv()
 
 JSEARCH_API_KEY = os.environ.get("JSEARCH_API_KEY", "")
-JSEARCH_URL = "https://api.openwebninja.com/jsearch/search-v2"
-
-# Countries explicitly confirmed in JSearch's own documentation FAQ.
-# Their list says "and many more" but these are the only ones named outright,
-# so this is the verified subset rather than a guess at full coverage.
-SUPPORTED_COUNTRIES = {
-    "in": "India",
-    "us": "United States",
-    "gb": "United Kingdom",
-    "ca": "Canada",
-    "de": "Germany",
-    "sg": "Singapore",
-}
-
-# India-specific salary brackets (LPA = Lakhs Per Annum).
-# Values are the annual INR floor used for client-side filtering, since
-# JSearch has no documented server-side salary_min parameter.
-INDIA_SALARY_BRACKETS = {
-    "₹3-5 LPA": 300_000,
-    "₹5-7 LPA": 500_000,
-    "₹7-10 LPA": 700_000,
-    "₹10-15 LPA": 1_000_000,
-    "₹15 LPA+": 1_500_000,
-    "No preference": None,
-}
 
 
 def search_jobs(
     job_title: str,
     country_code: str,
     city: str = "",
-    salary_min: int | None = None,
 ) -> list[dict]:
     """
     Search live job listings via JSearch.
@@ -114,21 +89,17 @@ def search_jobs(
         print(f"[job_search] Unexpected response type: {type(data).__name__}, value: {str(data)[:300]}")
         return []
 
+    # CONFIRMED response shape from live testing:
+    # {"data": {"jobs": [...]}}
+    # The jobs list is nested one level deeper than typical docs suggest.
     raw_jobs = data.get("data") or data.get("jobs") or data.get("results") or []
     if not isinstance(raw_jobs, list):
         print(f"[job_search] 'jobs' field was not a list: {type(raw_jobs).__name__}")
         raw_jobs = []
+
     jobs = []
     for item in raw_jobs:
         if not isinstance(item, dict):
-            continue
-        min_sal = item.get("job_min_salary")
-        max_sal = item.get("job_max_salary")
-
-        # Client-side salary filter: only excludes a job if it HAS salary data
-        # AND that data is below the floor. Jobs with no salary data (the
-        # majority, per JSearch's own FAQ) are kept rather than dropped.
-        if salary_min and max_sal and max_sal < salary_min:
             continue
 
         location_parts = [
@@ -141,8 +112,8 @@ def search_jobs(
                 "title": item.get("job_title", "Untitled role"),
                 "company": item.get("employer_name", "Unknown company"),
                 "location": location,
-                "salary_min": min_sal,
-                "salary_max": max_sal,
+                "salary_min": item.get("job_min_salary"),
+                "salary_max": item.get("job_max_salary"),
                 "apply_link": item.get("job_apply_link", ""),
                 "description": item.get("job_description", ""),
             }
@@ -155,23 +126,12 @@ def score_job_fit(resume_context: str, job: dict) -> dict:
     Score one job against the resume. Returns a dict:
     {fit_score, matched_skills, missing_skills, one_line_reason}
     """
-    prompt = f"""You are JobGenie. Compare this candidate's resume against one job listing.
-
-Candidate background:
-{resume_context[:1500]}
-
-Job Title: {job.get('title', '')}
-Company: {job.get('company', '')}
-Job Description:
-{job.get('description', '')[:1200]}
-
-Reply ONLY with valid JSON (no markdown, no backticks):
-{{
-  "fit_score": 75,
-  "matched_skills": ["skill1", "skill2", "skill3"],
-  "missing_skills": ["skill1", "skill2"],
-  "one_line_reason": "Short reason for the score, max 20 words"
-}}"""
+    prompt = PROMPT_SCORE_JOB.format(
+        resume_context=resume_context[:1500],
+        job_title=job.get("title", ""),
+        company=job.get("company", ""),
+        description=job.get("description", "")[:1200],
+    )
 
     raw = _call_llm(prompt).strip()
     if raw.startswith("```"):
@@ -231,14 +191,17 @@ def run_job_search_pipeline(
     job_title: str,
     country_code: str,
     city: str,
-    salary_min: int | None = None,
-    max_jobs_to_score: int = 8,
+    max_jobs_to_score: int = MAX_JOBS_TO_SCORE,
 ) -> dict:
     """
     End-to-end pipeline: search -> score each job -> aggregate missing skills
     -> attach learning links.
+
+    Salary filtering removed: most job postings do not include salary data
+    (confirmed in OpenWeb Ninja's own FAQ and from live testing). The salary
+    question added friction without reliable payoff.
     """
-    jobs = search_jobs(job_title, country_code, city, salary_min)
+    jobs = search_jobs(job_title, country_code, city)
 
     if not jobs:
         return {"jobs": [], "missing_skills_summary": [], "total_found": 0}
