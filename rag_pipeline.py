@@ -190,13 +190,26 @@ def parse_jd(jd_text: str) -> dict:
     Extract structured fields from a raw JD string.
     Returns a dict with keys: JOB_TITLE, COMPANY, EXPERIENCE,
     TECHNICAL_SKILLS, SOFT_SKILLS.
+
+    NOTE: json.loads() succeeding does not guarantee a dict comes back.
+    If the LLM wraps its answer in a JSON array (observed in production
+    logs, 2026-11-02, when a user pasted a JD containing duplicated text),
+    json.loads() returns a list with no exception raised, and callers doing
+    parsed.get(...) crash with AttributeError. The isinstance check below
+    normalizes that case: if a list comes back, use its first dict element,
+    otherwise fall through to the same safe default as a parse failure.
     """
     prompt = PROMPT_PARSE_JD.format(jd_text=jd_text[:3000])
     raw = _call_llm(prompt)
     raw = _clean_json_response(raw)
 
     try:
-        return json.loads(raw)
+        result = json.loads(raw)
+        if isinstance(result, list):
+            result = next((item for item in result if isinstance(item, dict)), None)
+        if isinstance(result, dict):
+            return result
+        raise ValueError(f"parse_jd got unexpected JSON shape: {type(result).__name__}")
     except Exception:
         return {
             "JOB_TITLE": "Not extracted",
