@@ -1,7 +1,7 @@
 """
 app.py - JobGenie RAG Assistant (Chainlit UI)
 
-New flow (Nov 2026 redesign):
+Flow (Nov 2026 redesign, v2):
 1. User uploads resume PDF
 2. "Processing your resume..." spinner shown during embedding
 3. Resume analyzed via Groq -> 3 AI-recommended job titles shown as buttons + "Other"
@@ -10,6 +10,22 @@ New flow (Nov 2026 redesign):
 6. City input (free text)
 7. Job search runs, results shown ranked with fit scores
 8. Secondary options shown below results: "Analyze a JD", "Compare JDs", "Ask About Profile"
+
+IMPORTANT ARCHITECTURE NOTE (fixes a real Chainlit bug, GitHub issue #2204):
+cl.AskActionMessage and cl.AskUserMessage must NEVER be called from inside a
+function invoked by @cl.action_callback. Doing so corrupts the session so
+that any action buttons sent afterward in that same chain become permanently
+unresponsive, even though the Ask itself works. This bit us once already:
+the original version of this file called AskActionMessage (country) and
+AskUserMessage (city) from inside the title-pick action callback, which
+worked for those two Asks but silently broke every button sent after them
+("What's next?" results, etc).
+
+The fix: country and city collection are NOT blocking Asks. They are plain
+cl.Message(actions=...) sends, and the user's reply is captured by the
+top-level @cl.on_message handler using a "flow_stage" session variable as a
+tiny state machine. No Ask* is ever called from within an action_callback
+anywhere in this file.
 """
 
 import chainlit as cl
@@ -170,40 +186,39 @@ def format_job_search_results(results: dict, job_title: str, city: str, country_
     return output
 
 
-# ── Job Search Flow (the primary path) ─────────────────────────────────────
+def build_title_actions(titles: list[str]) -> list[cl.Action]:
+    """Build the job-title selection button list, including the 'Other' option."""
+    actions = [
+        cl.Action(name="title_pick", payload={"title": title}, label=title)
+        for title in titles
+    ]
+    actions.append(
+        cl.Action(name="title_other", payload={"title": "other"}, label="Other (type your own)")
+    )
+    return actions
 
-async def run_job_search_flow(resume_text: str, job_title: str):
-    """
-    Handles the flow after a job title is selected:
-    country -> city -> search -> results -> secondary options.
-    """
-    # ── Country selection ──
+
+async def send_country_prompt():
+    """Send the country selection buttons. Never called from inside an Ask*."""
     country_actions = [
         cl.Action(name="country_pick", payload={"code": code}, label=name)
         for code, name in SUPPORTED_COUNTRIES.items()
     ]
-    country_res = await cl.AskActionMessage(
+    await cl.Message(
         content="Which country are you targeting?",
         actions=country_actions,
-        timeout=120,
     ).send()
-    if not country_res:
-        await cl.Message(content="No response received. Please start a new chat to try again.").send()
-        return
-    country_code = country_res.get("payload", {}).get("code", "in")
+
+
+async def run_search_and_show_results(job_title: str, country_code: str, city: str):
+    """
+    Runs the search, shows results, then shows the secondary ('What's next?')
+    actions. Called ONLY from on_message (never from inside an action_callback),
+    so the action buttons it sends remain clickable.
+    """
+    resume_text = cl.user_session.get("resume_text", "")
     country_name = SUPPORTED_COUNTRIES.get(country_code, "India")
 
-    # ── City input ──
-    city_res = await cl.AskUserMessage(
-        content=f"Which city in {country_name}? (type \"any\" for no preference)",
-        timeout=120,
-    ).send()
-    if not city_res:
-        await cl.Message(content="No response received. Please start a new chat to try again.").send()
-        return
-    city = city_res["output"].strip()
-
-    # ── Search + Score ──
     async with cl.Step(name="Searching live job listings") as step:
         results = run_job_search_pipeline(
             resume_context=resume_text,
@@ -218,7 +233,6 @@ async def run_job_search_flow(resume_text: str, job_title: str):
         output_md += "\n\n*Job listings powered by [JSearch](https://www.openwebninja.com/api/jsearch)*"
     await cl.Message(content=output_md).send()
 
-    # ── Secondary options after results ──
     await cl.Message(
         content="**What's next?**",
         actions=[
@@ -255,7 +269,6 @@ async def start():
 
     resume_file = files[0]
 
-    # ── Processing with visible spinner ──
     async with cl.Step(name="Processing your resume...") as step:
         try:
             with open(resume_file.path, "rb") as f:
@@ -276,14 +289,16 @@ async def start():
             await cl.Message(content=f"Error processing resume: {str(e)}").send()
             return
 
-    # ── Quick skill detection for confirmation ──
     skills_found = [s for s in SKILL_KEYWORDS if s.lower() in resume_text.lower()]
     skills_display = " - ".join(skills_found[:6]) if skills_found else "Skills detected"
     first_line = resume_text.strip().split("\n")[0].strip()
     name_line = f" - **{first_line}**" if len(first_line) < 40 else ""
 
-    # Initialize session state
+    # Initialize session state. flow_stage drives the on_message state machine.
     cl.user_session.set("mode", "jobsearch")
+    cl.user_session.set("flow_stage", None)
+    cl.user_session.set("pending_job_title", None)
+    cl.user_session.set("pending_country_code", None)
     cl.user_session.set("compare_jds_list", [])
     cl.user_session.set("compare_mode_active", False)
 
@@ -294,53 +309,50 @@ async def start():
         )
     ).send()
 
-    # ── AI-recommended job titles ──
     async with cl.Step(name="Analyzing your resume for job matches...") as step:
         suggested_titles = suggest_job_titles(resume_text)
         step.output = f"Suggested: {', '.join(suggested_titles)}"
-
-    title_actions = [
-        cl.Action(name="title_pick", payload={"title": title}, label=title)
-        for title in suggested_titles
-    ]
-    title_actions.append(
-        cl.Action(name="title_other", payload={"title": "other"}, label="Other (type your own)")
-    )
 
     await cl.Message(
         content=(
             "**Based on your resume, here are the best-fit job titles.**\n\n"
             "Pick one to start searching, or type your own:"
         ),
-        actions=title_actions,
+        actions=build_title_actions(suggested_titles),
     ).send()
 
 
-# ── Title Selection Callbacks ──────────────────────────────────────────────
+# ── Title Selection Callbacks (no Ask* calls here) ──────────────────────────
 
 @cl.action_callback("title_pick")
 async def on_title_pick(action: cl.Action):
-    """User clicked one of the AI-suggested titles."""
+    """User clicked one of the AI-suggested titles. Move to country selection."""
     job_title = action.payload.get("title", "Data Analyst")
-    resume_text = cl.user_session.get("resume_text", "")
-    await cl.Message(content=f"Searching for **{job_title}** roles...").send()
-    await run_job_search_flow(resume_text, job_title)
+    cl.user_session.set("pending_job_title", job_title)
+    cl.user_session.set("flow_stage", "awaiting_country_click")
+    await cl.Message(content=f"Great, searching for **{job_title}** roles.").send()
+    await send_country_prompt()
 
 
 @cl.action_callback("title_other")
 async def on_title_other(action: cl.Action):
-    """User wants to type a custom job title."""
-    title_res = await cl.AskUserMessage(
-        content="What job title or role are you targeting? (e.g. \"Data Analyst\", \"GTM Engineer\")",
-        timeout=120,
+    """User wants to type a custom job title. Capture it via on_message, not Ask*."""
+    cl.user_session.set("flow_stage", "awaiting_custom_title")
+    await cl.Message(
+        content="What job title or role are you targeting? (e.g. \"Data Analyst\", \"GTM Engineer\"). Just type it below."
     ).send()
-    if not title_res:
-        await cl.Message(content="No response received. Please start a new chat to try again.").send()
-        return
-    job_title = title_res["output"].strip()
-    resume_text = cl.user_session.get("resume_text", "")
-    await cl.Message(content=f"Searching for **{job_title}** roles...").send()
-    await run_job_search_flow(resume_text, job_title)
+
+
+@cl.action_callback("country_pick")
+async def on_country_pick(action: cl.Action):
+    """User picked a country. Move to city collection."""
+    country_code = action.payload.get("code", "in")
+    country_name = SUPPORTED_COUNTRIES.get(country_code, "India")
+    cl.user_session.set("pending_country_code", country_code)
+    cl.user_session.set("flow_stage", "awaiting_city")
+    await cl.Message(
+        content=f"Selected: **{country_name}**\n\nWhich city? (type \"any\" for no preference)"
+    ).send()
 
 
 # ── Secondary Mode Callbacks ──────────────────────────────────────────────
@@ -349,26 +361,21 @@ async def on_title_other(action: cl.Action):
 async def on_restart_search(action: cl.Action):
     """User wants to search again with a different title."""
     resume_text = cl.user_session.get("resume_text", "")
+    cl.user_session.set("flow_stage", None)
     async with cl.Step(name="Analyzing resume...") as step:
         suggested_titles = suggest_job_titles(resume_text)
         step.output = f"Suggested: {', '.join(suggested_titles)}"
 
-    title_actions = [
-        cl.Action(name="title_pick", payload={"title": title}, label=title)
-        for title in suggested_titles
-    ]
-    title_actions.append(
-        cl.Action(name="title_other", payload={"title": "other"}, label="Other (type your own)")
-    )
     await cl.Message(
         content="Pick a job title or type your own:",
-        actions=title_actions,
+        actions=build_title_actions(suggested_titles),
     ).send()
 
 
 @cl.action_callback("mode_single")
 async def on_single(action: cl.Action):
     cl.user_session.set("mode", "single")
+    cl.user_session.set("flow_stage", None)
     cl.user_session.set("compare_mode_active", False)
     await cl.Message(
         content="**Single JD mode active.**\n\nPaste any Job Description below and I'll give you the full analysis."
@@ -378,6 +385,7 @@ async def on_single(action: cl.Action):
 @cl.action_callback("mode_compare")
 async def on_compare(action: cl.Action):
     cl.user_session.set("mode", "compare")
+    cl.user_session.set("flow_stage", None)
     cl.user_session.set("compare_jds_list", [])
     cl.user_session.set("compare_mode_active", True)
     await cl.Message(
@@ -392,6 +400,7 @@ async def on_compare(action: cl.Action):
 @cl.action_callback("mode_qa")
 async def on_qa(action: cl.Action):
     cl.user_session.set("mode", "qa")
+    cl.user_session.set("flow_stage", None)
     cl.user_session.set("compare_mode_active", False)
     await cl.Message(
         content=(
@@ -442,13 +451,34 @@ async def on_run_comparison(action: cl.Action):
     ).send()
 
 
-# ── Message Handler ────────────────────────────────────────────────────────
+# ── Message Handler (state machine for flow_stage, plus everything else) ───
 
 @cl.on_message
 async def on_message(message: cl.Message):
-    jd_text = message.content.strip()
+    text = message.content.strip()
+    flow_stage = cl.user_session.get("flow_stage")
+
+    # ── State machine: custom job title typed in ──
+    if flow_stage == "awaiting_custom_title":
+        job_title = text
+        cl.user_session.set("pending_job_title", job_title)
+        cl.user_session.set("flow_stage", "awaiting_country_click")
+        await cl.Message(content=f"Great, searching for **{job_title}** roles.").send()
+        await send_country_prompt()
+        return
+
+    # ── State machine: city typed in, ready to run the search ──
+    if flow_stage == "awaiting_city":
+        city = text
+        job_title = cl.user_session.get("pending_job_title", "")
+        country_code = cl.user_session.get("pending_country_code", "in")
+        cl.user_session.set("flow_stage", None)
+        await run_search_and_show_results(job_title, country_code, city)
+        return
+
     mode = cl.user_session.get("mode", "single")
     compare_active = cl.user_session.get("compare_mode_active", False)
+    jd_text = text
 
     # ── Compare mode: collecting JDs ──
     if compare_active:
