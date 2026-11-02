@@ -308,36 +308,23 @@ async def run_search_and_show_results(job_title: str, country_code: str, city: s
         title_part = f"search results for {job_title}"
         asyncio.create_task(_background_save(user_id, tracker_record, title_part))
 
-        applied_actions = []
-        interested_actions = []
-        not_interested_actions = []
-        for job in results["jobs"][:8]:
+        # One short message per job, each with its own three status buttons,
+        # instead of three long walls of 8 buttons each grouped by status.
+        # Previously a user had to cross-reference "Applied: X" against
+        # "Interested: X" against "Not interested: X" across three separate
+        # messages to find one job's three options; here they sit together,
+        # right under that job's own number, matching the numbering already
+        # used in the results list above.
+        for i, job in enumerate(results["jobs"][:8], 1):
             key = f"{job.get('company', '')}::{job.get('title', '')}"
-            short_label = job.get("title", "")[:30]
-            applied_actions.append(
-                cl.Action(name="mark_applied", payload={"job_key": key}, label=f"Applied: {short_label}")
-            )
-            interested_actions.append(
-                cl.Action(name="mark_interested", payload={"job_key": key}, label=f"Interested: {short_label}")
-            )
-            not_interested_actions.append(
-                cl.Action(name="mark_not_interested", payload={"job_key": key}, label=f"Not interested: {short_label}")
-            )
-
-        if applied_actions:
+            short_label = job.get("title", "")[:34]
             await cl.Message(
-                content="**Mark any you've applied to** (saved to your tracker):",
-                actions=applied_actions,
-            ).send()
-        if interested_actions:
-            await cl.Message(
-                content="**Mark any you're interested in:**",
-                actions=interested_actions,
-            ).send()
-        if not_interested_actions:
-            await cl.Message(
-                content="**Mark any you're not interested in:**",
-                actions=not_interested_actions,
+                content=f"**#{i}** {short_label}:",
+                actions=[
+                    cl.Action(name="mark_applied", payload={"job_key": key}, label="Applied"),
+                    cl.Action(name="mark_interested", payload={"job_key": key}, label="Interested"),
+                    cl.Action(name="mark_not_interested", payload={"job_key": key}, label="Not interested"),
+                ],
             ).send()
 
     await send_next_steps_menu()
