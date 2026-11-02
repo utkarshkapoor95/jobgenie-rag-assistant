@@ -1,472 +1,392 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JobGenie RAG Assistant | Autothynk</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg: #0a0a0f;
-            --surface: #12121a;
-            --border: #1e1e2e;
-            --text: #e4e4e7;
-            --text-muted: #8b8b9e;
-            --accent: #6366f1;
-            --accent-glow: rgba(99, 102, 241, 0.15);
-            --green: #22c55e;
-            --amber: #f59e0b;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JobGenie — Turn your resume into a ranked shortlist</title>
+<meta name="description" content="Upload a resume, get live-scored job matches with skill gap analysis and learning links, built on LangChain, Pinecone, and Groq.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0F1419;
+    --bg-card: #1C2430;
+    --text: #F5F3EE;
+    --text-muted: #8B95A3;
+    --accent: #5B8C7E;
+    --accent-dim: #3E5F55;
+    --border: #2A3542;
+    --radius: 10px;
+  }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        body {
-            font-family: 'Inter', system-ui, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            line-height: 1.6;
-            min-height: 100vh;
-        }
+  html { scroll-behavior: smooth; }
 
-        .container {
-            max-width: 860px;
-            margin: 0 auto;
-            padding: 0 24px;
-        }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
 
-        /* Hero */
-        .hero {
-            padding: 80px 0 60px;
-            text-align: center;
-        }
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
 
-        .badge {
-            display: inline-block;
-            background: var(--accent-glow);
-            color: var(--accent);
-            font-size: 13px;
-            font-weight: 600;
-            padding: 6px 16px;
-            border-radius: 100px;
-            border: 1px solid rgba(99, 102, 241, 0.25);
-            margin-bottom: 24px;
-            letter-spacing: 0.02em;
-        }
+  /* ── Nav ── */
+  nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 28px 0;
+  }
 
-        h1 {
-            font-size: clamp(32px, 5vw, 48px);
-            font-weight: 700;
-            line-height: 1.15;
-            margin-bottom: 16px;
-            letter-spacing: -0.02em;
-        }
+  .logo {
+    font-family: 'Fraunces', serif;
+    font-size: 1.3rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
 
-        .subtitle {
-            font-size: 18px;
-            color: var(--text-muted);
-            max-width: 560px;
-            margin: 0 auto 40px;
-        }
+  .nav-links { display: flex; gap: 32px; align-items: center; }
+  .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 0.92rem; }
+  .nav-links a:hover { color: var(--text); }
 
-        .cta-group {
-            display: flex;
-            gap: 16px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--bg);
+    padding: 10px 22px;
+    border-radius: var(--radius);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 0.92rem;
+    transition: background 0.15s ease;
+    display: inline-block;
+  }
+  .btn-primary:hover { background: #6B9C8E; }
 
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 14px 28px;
-            border-radius: 10px;
-            font-size: 15px;
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.2s;
-        }
+  .btn-primary:focus-visible, a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
 
-        .btn-primary {
-            background: var(--accent);
-            color: #fff;
-        }
-        .btn-primary:hover { background: #5558e6; transform: translateY(-1px); }
+  /* ── Hero ── */
+  .hero {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 60px;
+    align-items: center;
+    padding: 70px 0 90px;
+  }
 
-        .btn-outline {
-            background: transparent;
-            color: var(--text);
-            border: 1px solid var(--border);
-        }
-        .btn-outline:hover { border-color: var(--text-muted); }
+  .hero-text h1 {
+    font-family: 'Fraunces', serif;
+    font-size: 3.1rem;
+    font-weight: 500;
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    max-width: 480px;
+  }
 
-        /* RAGAS Scores */
-        .scores-section {
-            padding: 60px 0;
-        }
+  .hero-text p {
+    margin-top: 22px;
+    color: var(--text-muted);
+    font-size: 1.08rem;
+    max-width: 420px;
+  }
 
-        .section-label {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--accent);
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            margin-bottom: 12px;
-        }
+  .hero-cta { margin-top: 34px; display: flex; gap: 16px; align-items: center; }
+  .link-secondary { color: var(--text-muted); text-decoration: underline; text-underline-offset: 3px; font-size: 0.92rem; }
+  .link-secondary:hover { color: var(--text); }
 
-        h2 {
-            font-size: 28px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            letter-spacing: -0.01em;
-        }
+  /* ── Hero demo visual: resume -> scored job cards ── */
+  .demo-visual {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
 
-        .section-desc {
-            color: var(--text-muted);
-            margin-bottom: 36px;
-            font-size: 15px;
-        }
+  .resume-doc {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    width: 130px;
+    flex-shrink: 0;
+  }
 
-        .score-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 16px;
-        }
+  .resume-doc .line { height: 7px; background: var(--border); border-radius: 3px; margin-bottom: 9px; }
+  .resume-doc .line.w80 { width: 80%; }
+  .resume-doc .line.w60 { width: 60%; }
+  .resume-doc .line.w90 { width: 90%; background: var(--accent-dim); }
+  .resume-doc .line.w40 { width: 40%; }
 
-        .score-card {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 28px 24px;
-        }
+  .flow-arrow {
+    color: var(--accent);
+    font-size: 1.4rem;
+    opacity: 0.7;
+    flex-shrink: 0;
+  }
 
-        .score-value {
-            font-size: 42px;
-            font-weight: 700;
-            color: var(--green);
-            line-height: 1;
-            margin-bottom: 8px;
-        }
+  .job-cards { display: flex; flex-direction: column; gap: 10px; flex: 1; }
 
-        .score-card:nth-child(3) .score-value {
-            color: var(--amber);
-        }
+  .job-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    font-size: 0.82rem;
+    animation: slideIn 0.6s ease backwards;
+  }
+  .job-card:nth-child(1) { animation-delay: 0.15s; }
+  .job-card:nth-child(2) { animation-delay: 0.3s; }
+  .job-card:nth-child(3) { animation-delay: 0.45s; }
 
-        .score-label {
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(16px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
 
-        .score-desc {
-            font-size: 13px;
-            color: var(--text-muted);
-        }
+  @media (prefers-reduced-motion: reduce) {
+    .job-card { animation: none; }
+  }
 
-        /* Architecture */
-        .arch-section {
-            padding: 60px 0;
-        }
+  .job-card .fit {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .job-card .fit span:last-child { color: var(--accent); }
 
-        .pipeline {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            margin-top: 36px;
-        }
+  .job-card .bar-track {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .job-card .bar-fill { height: 100%; background: var(--accent); }
 
-        .pipe-step {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 16px 20px;
-        }
+  /* ── How it works ── */
+  .section { padding: 70px 0; border-top: 1px solid var(--border); }
+  .section-label { color: var(--text-muted); font-size: 0.95rem; margin-bottom: 14px; }
 
-        .pipe-num {
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--accent-glow);
-            color: var(--accent);
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 700;
-            flex-shrink: 0;
-        }
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+    margin-top: 28px;
+  }
 
-        .pipe-content {
-            flex: 1;
-        }
+  .step .num {
+    font-family: 'Fraunces', serif;
+    font-size: 1.6rem;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  .step h3 { font-size: 1.1rem; margin-bottom: 8px; font-weight: 600; }
+  .step p { color: var(--text-muted); font-size: 0.94rem; }
 
-        .pipe-title {
-            font-size: 15px;
-            font-weight: 600;
-        }
+  /* ── Feature grid ── */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-top: 28px;
+  }
 
-        .pipe-tech {
-            font-size: 13px;
-            color: var(--text-muted);
-        }
+  .feature {
+    background: var(--bg);
+    padding: 26px;
+  }
 
-        .pipe-arrow {
-            text-align: center;
-            color: var(--text-muted);
-            font-size: 18px;
-            padding: 4px 0;
-        }
+  .feature h3 { font-size: 1rem; margin-bottom: 8px; font-weight: 600; }
+  .feature p { color: var(--text-muted); font-size: 0.92rem; }
 
-        /* Tech Stack */
-        .stack-section {
-            padding: 60px 0;
-        }
+  /* ── Stack ── */
+  .stack-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 24px;
+  }
 
-        .stack-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 12px;
-            margin-top: 36px;
-        }
+  .stack-pill {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 7px 16px;
+    font-size: 0.86rem;
+    color: var(--text-muted);
+  }
 
-        .stack-item {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 20px;
-            text-align: center;
-        }
+  /* ── CTA footer ── */
+  .footer-cta {
+    text-align: left;
+    padding: 80px 0 60px;
+    border-top: 1px solid var(--border);
+  }
 
-        .stack-name {
-            font-size: 15px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
+  .footer-cta h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 2.1rem;
+    font-weight: 500;
+    max-width: 480px;
+    margin-bottom: 26px;
+  }
 
-        .stack-role {
-            font-size: 13px;
-            color: var(--text-muted);
-        }
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 28px 0 40px;
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-muted);
+    font-size: 0.86rem;
+  }
+  footer a { color: var(--text-muted); }
 
-        /* Features */
-        .features-section {
-            padding: 60px 0;
-        }
-
-        .feature-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 16px;
-            margin-top: 36px;
-        }
-
-        .feature-item {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 24px;
-        }
-
-        .feature-item h3 {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 6px;
-        }
-
-        .feature-item p {
-            font-size: 14px;
-            color: var(--text-muted);
-        }
-
-        /* Footer */
-        footer {
-            padding: 48px 0;
-            border-top: 1px solid var(--border);
-            text-align: center;
-        }
-
-        footer p {
-            color: var(--text-muted);
-            font-size: 14px;
-        }
-
-        footer a {
-            color: var(--accent);
-            text-decoration: none;
-        }
-        footer a:hover { text-decoration: underline; }
-
-        @media (max-width: 600px) {
-            .hero { padding: 48px 0 40px; }
-            .scores-section, .arch-section, .stack-section, .features-section { padding: 40px 0; }
-            .score-value { font-size: 36px; }
-        }
-    </style>
+  @media (max-width: 760px) {
+    .wrap { padding: 0 20px; }
+    nav { flex-wrap: wrap; gap: 14px; }
+    .nav-links { gap: 16px; flex-wrap: wrap; width: 100%; justify-content: flex-start; }
+    .nav-links .btn-primary { margin-left: auto; }
+    .hero { grid-template-columns: 1fr; padding-top: 30px; gap: 40px; }
+    .hero-text h1 { font-size: 2.1rem; }
+    .demo-visual { flex-direction: column; align-items: flex-start; }
+    .flow-arrow { transform: rotate(90deg); }
+    .steps { grid-template-columns: 1fr; gap: 28px; }
+    .features { grid-template-columns: 1fr; }
+    footer { flex-direction: column; gap: 10px; }
+  }
+</style>
 </head>
 <body>
-    <div class="container">
-        <section class="hero">
-            <div class="badge">RAG + LangChain + Pinecone + RAGAS</div>
-            <h1>JobGenie RAG Assistant</h1>
-            <p class="subtitle">Upload your resume, paste any job description, get skill gaps, a tailored pitch, predicted interview questions, and a confidence score in under 30 seconds.</p>
-            <div class="cta-group">
-                <a href="https://huggingface.co/spaces/Utkarsh94123/jobgenie-rag-assistant" target="_blank" class="btn btn-primary">
-                    Try Live Demo
-                </a>
-                <a href="https://github.com/utkarshkapoor95/jobgenie-rag-assistant" target="_blank" class="btn btn-outline">
-                    View Source
-                </a>
-            </div>
-        </section>
 
-        <section class="scores-section">
-            <div class="section-label">Evaluation</div>
-            <h2>RAGAS Scores</h2>
-            <p class="section-desc">Evaluated across 20 test queries using the RAGAS framework for RAG quality assessment.</p>
-            <div class="score-grid">
-                <div class="score-card">
-                    <div class="score-value">0.87</div>
-                    <div class="score-label">Faithfulness</div>
-                    <div class="score-desc">Answers grounded in retrieved resume context</div>
-                </div>
-                <div class="score-card">
-                    <div class="score-value">0.82</div>
-                    <div class="score-label">Answer Relevancy</div>
-                    <div class="score-desc">Outputs address the actual question asked</div>
-                </div>
-                <div class="score-card">
-                    <div class="score-value">0.79</div>
-                    <div class="score-label">Context Precision</div>
-                    <div class="score-desc">Retrieved chunks are relevant to the query</div>
-                </div>
-            </div>
-        </section>
-
-        <section class="arch-section">
-            <div class="section-label">Architecture</div>
-            <h2>RAG Pipeline</h2>
-            <p class="section-desc">End-to-end retrieval-augmented generation with semantic search over resume embeddings.</p>
-            <div class="pipeline">
-                <div class="pipe-step">
-                    <div class="pipe-num">1</div>
-                    <div class="pipe-content">
-                        <div class="pipe-title">Document Ingestion</div>
-                        <div class="pipe-tech">PyMuPDF / PyPDF2 extract text from uploaded PDF resume</div>
-                    </div>
-                </div>
-                <div class="pipe-arrow">&#8595;</div>
-                <div class="pipe-step">
-                    <div class="pipe-num">2</div>
-                    <div class="pipe-content">
-                        <div class="pipe-title">Chunking + Embedding</div>
-                        <div class="pipe-tech">RecursiveCharacterTextSplitter (400 chars) into all-MiniLM-L6-v2 (384-dim vectors)</div>
-                    </div>
-                </div>
-                <div class="pipe-arrow">&#8595;</div>
-                <div class="pipe-step">
-                    <div class="pipe-num">3</div>
-                    <div class="pipe-content">
-                        <div class="pipe-title">Vector Storage + Retrieval</div>
-                        <div class="pipe-tech">Pinecone Serverless (cosine similarity, top-5 retrieval)</div>
-                    </div>
-                </div>
-                <div class="pipe-arrow">&#8595;</div>
-                <div class="pipe-step">
-                    <div class="pipe-num">4</div>
-                    <div class="pipe-content">
-                        <div class="pipe-title">RAG Chain + Generation</div>
-                        <div class="pipe-tech">LangChain prompt templates + Groq LLaMA 3.3 70B (320 tok/sec)</div>
-                    </div>
-                </div>
-                <div class="pipe-arrow">&#8595;</div>
-                <div class="pipe-step">
-                    <div class="pipe-num">5</div>
-                    <div class="pipe-content">
-                        <div class="pipe-title">Structured Output</div>
-                        <div class="pipe-tech">Skill gap table, pitch, interview questions, confidence dashboard</div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="stack-section">
-            <div class="section-label">Built With</div>
-            <h2>Tech Stack</h2>
-            <div class="stack-grid">
-                <div class="stack-item">
-                    <div class="stack-name">LangChain</div>
-                    <div class="stack-role">RAG Framework</div>
-                </div>
-                <div class="stack-item">
-                    <div class="stack-name">Pinecone</div>
-                    <div class="stack-role">Vector Database</div>
-                </div>
-                <div class="stack-item">
-                    <div class="stack-name">Groq</div>
-                    <div class="stack-role">LLM Inference</div>
-                </div>
-                <div class="stack-item">
-                    <div class="stack-name">RAGAS</div>
-                    <div class="stack-role">RAG Evaluation</div>
-                </div>
-                <div class="stack-item">
-                    <div class="stack-name">Chainlit</div>
-                    <div class="stack-role">Chat Interface</div>
-                </div>
-                <div class="stack-item">
-                    <div class="stack-name">Docker</div>
-                    <div class="stack-role">Containerization</div>
-                </div>
-                <div class="stack-item">
-                    <div class="stack-name">GitHub Actions</div>
-                    <div class="stack-role">CI/CD Pipeline</div>
-                </div>
-                <div class="stack-item">
-                    <div class="stack-name">HuggingFace</div>
-                    <div class="stack-role">Deployment</div>
-                </div>
-            </div>
-        </section>
-
-        <section class="features-section">
-            <div class="section-label">Capabilities</div>
-            <h2>What It Does</h2>
-            <div class="feature-list">
-                <div class="feature-item">
-                    <h3>Skill Gap Analysis</h3>
-                    <p>Matches, gaps, and how to reframe transferable experience for the target role.</p>
-                </div>
-                <div class="feature-item">
-                    <h3>60-Second Pitch</h3>
-                    <p>Interview-ready elevator pitch tailored to the specific role and company.</p>
-                </div>
-                <div class="feature-item">
-                    <h3>Interview Predictor</h3>
-                    <p>10 likely questions (technical, behavioral, situational) with answer frameworks.</p>
-                </div>
-                <div class="feature-item">
-                    <h3>Multi-JD Comparison</h3>
-                    <p>Compare up to 3 JDs side-by-side with match scores and a best-fit pick.</p>
-                </div>
-                <div class="feature-item">
-                    <h3>Confidence Score</h3>
-                    <p>Readiness score across technical skills, experience, education, and portfolio.</p>
-                </div>
-                <div class="feature-item">
-                    <h3>Profile Q&A</h3>
-                    <p>Ask anything: salary expectations, career switch framing, skill positioning.</p>
-                </div>
-            </div>
-        </section>
-
-        <footer>
-            <p>Built by <a href="https://autothynk.com" target="_blank">Utkarsh Kapoor</a> | <a href="https://github.com/utkarshkapoor95/jobgenie-rag-assistant" target="_blank">GitHub</a></p>
-        </footer>
+<div class="wrap">
+  <nav>
+    <div class="logo">JobGenie</div>
+    <div class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#stack">Stack</a>
+      <a href="https://github.com/utkarshkapoor95/jobgenie-rag-assistant">GitHub</a>
+      <a href="https://huggingface.co/spaces/Utkarsh94123/jobgenie-rag-assistant" class="btn-primary">Try it live</a>
     </div>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-text">
+      <h1>Turn your resume into a ranked shortlist.</h1>
+      <p>Upload a resume. JobGenie suggests matching job titles, pulls live listings, and scores each one against what you actually have, skills matched, skills missing, and where to learn them.</p>
+      <div class="hero-cta">
+        <a href="https://huggingface.co/spaces/Utkarsh94123/jobgenie-rag-assistant" class="btn-primary">Try it live</a>
+        <a href="https://github.com/utkarshkapoor95/jobgenie-rag-assistant" class="link-secondary">View the code</a>
+      </div>
+    </div>
+
+    <div class="demo-visual">
+      <div class="resume-doc" aria-hidden="true">
+        <div class="line w90"></div>
+        <div class="line w60"></div>
+        <div class="line w80"></div>
+        <div class="line w40"></div>
+        <div class="line w60"></div>
+        <div class="line w80"></div>
+        <div class="line w40"></div>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">&rarr;</div>
+      <div class="job-cards" aria-hidden="true">
+        <div class="job-card">
+          <div class="fit"><span>AI Solutions Engineer</span><span>68%</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width: 68%"></div></div>
+        </div>
+        <div class="job-card">
+          <div class="fit"><span>Marketing Automation</span><span>55%</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width: 55%"></div></div>
+        </div>
+        <div class="job-card">
+          <div class="fit"><span>GTM Engineer</span><span>45%</span></div>
+          <div class="bar-track"><div class="bar-fill" style="width: 45%"></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="how">
+    <div class="section-label">How it works</div>
+    <div class="steps">
+      <div class="step">
+        <div class="num">01</div>
+        <h3>Upload your resume</h3>
+        <p>JobGenie reads it, embeds it into a vector index, and suggests three job titles worth searching, picked from what's actually on the page.</p>
+      </div>
+      <div class="step">
+        <div class="num">02</div>
+        <h3>Pick a title and location</h3>
+        <p>One click on a suggested title, a country, and a city. No long forms, no typing a search query from scratch.</p>
+      </div>
+      <div class="step">
+        <div class="num">03</div>
+        <h3>Get a scored shortlist</h3>
+        <p>Live listings come back ranked by fit, with matched and missing skills called out, plus links to learn whatever's missing.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-label">What it tracks for you</div>
+    <div class="features">
+      <div class="feature">
+        <h3>Returning-user memory</h3>
+        <p>Come back with the same email and see what's changed since your last search, new listings are flagged automatically.</p>
+      </div>
+      <div class="feature">
+        <h3>Application tracker</h3>
+        <p>Mark a job as applied in one click. Your status is saved and carried forward even if that listing shows up again in a later search.</p>
+      </div>
+      <div class="feature">
+        <h3>Skill gap aggregation</h3>
+        <p>Instead of showing gaps per job, JobGenie rolls them up across every result so you can see what to learn first.</p>
+      </div>
+      <div class="feature">
+        <h3>Compare job descriptions</h3>
+        <p>Paste up to three JDs side by side and get a single recommendation on which one fits your profile best.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="stack">
+    <div class="section-label">Built with</div>
+    <div class="stack-row">
+      <span class="stack-pill">Chainlit</span>
+      <span class="stack-pill">LangChain</span>
+      <span class="stack-pill">Pinecone</span>
+      <span class="stack-pill">Groq (openai/gpt-oss-120b)</span>
+      <span class="stack-pill">JSearch API</span>
+      <span class="stack-pill">RAGAS evaluation</span>
+      <span class="stack-pill">Docker</span>
+      <span class="stack-pill">GitHub Actions CI</span>
+    </div>
+  </section>
+
+  <section class="footer-cta">
+    <h2>Upload a resume, see what it finds.</h2>
+    <a href="https://huggingface.co/spaces/Utkarsh94123/jobgenie-rag-assistant" class="btn-primary">Try JobGenie live</a>
+  </section>
+
+  <footer>
+    <span>JobGenie, built by <a href="https://github.com/utkarshkapoor95">Utkarsh Kapoor</a></span>
+    <span><a href="https://github.com/utkarshkapoor95/jobgenie-rag-assistant">Source on GitHub</a></span>
+  </footer>
+</div>
+
 </body>
 </html>

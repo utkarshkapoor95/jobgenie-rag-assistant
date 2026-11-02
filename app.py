@@ -33,6 +33,7 @@ from dotenv import load_dotenv
 
 from config import (
     GROQ_MODEL,
+    JOB_STATUS_LABELS,
     PROMPT_QA,
     SKILL_KEYWORDS,
     SUPPORTED_COUNTRIES,
@@ -47,6 +48,15 @@ from rag_pipeline import (
     parse_jd,
     predict_questions,
     suggest_job_titles,
+)
+from storage import (
+    get_all_seen_job_keys,
+    get_or_create_user,
+    is_configured as storage_is_configured,
+    record_search,
+    save_user,
+    summarize_tracker,
+    update_job_status,
 )
 
 load_dotenv()
@@ -121,10 +131,13 @@ def format_comparison_md(jobs: list) -> str:
     return f"## Side-by-Side Comparison\n\n{table}{recommendation}"
 
 
-def format_job_search_results(results: dict, job_title: str, city: str, country_name: str) -> str:
+def format_job_search_results(
+    results: dict, job_title: str, city: str, country_name: str, new_job_keys: set = None
+) -> str:
     """Format the full job search pipeline output as markdown."""
     jobs = results.get("jobs", [])
     total_found = results.get("total_found", 0)
+    new_job_keys = new_job_keys or set()
 
     if not jobs:
         return (
@@ -148,8 +161,11 @@ def format_job_search_results(results: dict, job_title: str, city: str, country_
             elif smin:
                 salary_line = f"\n**Salary:** {int(smin):,}+"
 
+        key = f"{job.get('company', '')}::{job.get('title', '')}"
+        new_tag = " `NEW`" if key in new_job_keys else ""
+
         output += (
-            f"### {i}. {job.get('title', 'Untitled')} - {job.get('company', 'Unknown')}\n"
+            f"### {i}. {job.get('title', 'Untitled')} - {job.get('company', 'Unknown')}{new_tag}\n"
             f"**Fit Score:** `{bars}` {fit}%  \n"
             f"**Location:** {job.get('location', 'Not specified')}"
             f"{salary_line}\n\n"
@@ -228,10 +244,46 @@ async def run_search_and_show_results(job_title: str, country_code: str, city: s
         )
         step.output = f"Found {results.get('total_found', 0)} listings, scored top {len(results.get('jobs', []))}."
 
-    output_md = format_job_search_results(results, job_title, city, country_name)
+    # ── Job Tracker: figure out which jobs are new since the user's last visit ──
+    tracker_record = cl.user_session.get("tracker_record")
+    new_job_keys = set()
+    if tracker_record is not None:
+        previously_seen = get_all_seen_job_keys(tracker_record, exclude_latest=False)
+        for job in results.get("jobs", []):
+            key = f"{job.get('company', '')}::{job.get('title', '')}"
+            if key not in previously_seen:
+                new_job_keys.add(key)
+
+    output_md = format_job_search_results(results, job_title, city, country_name, new_job_keys)
     if results.get("jobs"):
         output_md += "\n\n*Job listings powered by [JSearch](https://www.openwebninja.com/api/jsearch)*"
     await cl.Message(content=output_md).send()
+
+    # ── Job Tracker: save this search and show status buttons per job ──
+    if tracker_record is not None and results.get("jobs"):
+        tracker_record = record_search(tracker_record, job_title, country_code, city, results["jobs"])
+        cl.user_session.set("tracker_record", tracker_record)
+        user_id = cl.user_session.get("user_id")
+        saved = save_user(user_id, tracker_record)
+        if not saved:
+            print(f"[app] Warning: could not save tracker record for user (search still shown to user).")
+
+        status_actions = []
+        for job in results["jobs"][:8]:
+            key = f"{job.get('company', '')}::{job.get('title', '')}"
+            short_label = job.get("title", "")[:30]
+            status_actions.append(
+                cl.Action(
+                    name="mark_applied",
+                    payload={"job_key": key},
+                    label=f"Applied: {short_label}",
+                )
+            )
+        if status_actions:
+            await cl.Message(
+                content="**Mark any you've applied to** (saved to your tracker):",
+                actions=status_actions[:8],
+            ).send()
 
     await cl.Message(
         content="**What's next?**",
@@ -240,6 +292,7 @@ async def run_search_and_show_results(job_title: str, country_code: str, city: s
             cl.Action(name="mode_single", payload={"mode": "single"}, label="Analyze a Single JD"),
             cl.Action(name="mode_compare", payload={"mode": "compare"}, label="Compare Multiple JDs"),
             cl.Action(name="mode_qa", payload={"mode": "qa"}, label="Ask About My Profile"),
+            cl.Action(name="view_tracker", payload={"action": "tracker"}, label="View My Tracker"),
         ],
     ).send()
 
@@ -255,6 +308,40 @@ async def start():
             "**Step 1:** Upload your resume PDF to get started."
         )
     ).send()
+
+    # ── Job Tracker: identify the user (manual ID, not a resume hash) ──
+    # A resume-content hash was considered but rejected: it silently breaks
+    # the moment the user edits even one line of their resume, which makes
+    # it unreliable to demo live. A typed ID is predictable and doubles as
+    # a believable feature (most real SaaS products ask for an email).
+    user_id = None
+    returning = False
+    tracker_record = None
+
+    if storage_is_configured():
+        id_res = await cl.AskUserMessage(
+            content="Enter your email (used only to save your job search history on this device):",
+            timeout=120,
+        ).send()
+        if id_res and id_res["output"].strip():
+            user_id = id_res["output"].strip()
+            tracker_record, returning = get_or_create_user(user_id)
+            cl.user_session.set("user_id", user_id)
+            cl.user_session.set("tracker_record", tracker_record)
+
+            if returning:
+                summary = summarize_tracker(tracker_record)
+                counts = summary["counts"]
+                await cl.Message(
+                    content=(
+                        f"**Welcome back!**\n\n"
+                        f"You've run {summary['total_searches']} searches and tracked "
+                        f"{summary['total_unique_jobs']} jobs so far: "
+                        f"{counts['applied']} applied, {counts['interested']} interested, "
+                        f"{counts['not_interested']} not interested.\n\n"
+                        f"Upload your resume to run a new search, new matches will be flagged."
+                    )
+                ).send()
 
     files = await cl.AskFileMessage(
         content="Upload your resume as a PDF:",
@@ -409,6 +496,72 @@ async def on_qa(action: cl.Action):
             "how to explain your career switch, what skills to highlight, etc."
         )
     ).send()
+
+
+# ── Job Tracker Callbacks ───────────────────────────────────────────────────
+
+@cl.action_callback("mark_applied")
+async def on_mark_applied(action: cl.Action):
+    """User marked a specific job as applied. No Ask* calls here, safe to use."""
+    job_key = action.payload.get("job_key", "")
+    tracker_record = cl.user_session.get("tracker_record")
+    user_id = cl.user_session.get("user_id")
+
+    if tracker_record is None or not user_id:
+        await cl.Message(content="Tracker isn't set up for this session.").send()
+        return
+
+    tracker_record = update_job_status(tracker_record, job_key, "applied")
+    cl.user_session.set("tracker_record", tracker_record)
+    saved = save_user(user_id, tracker_record)
+
+    title_part = job_key.split("::", 1)[-1] if "::" in job_key else job_key
+    if saved:
+        await cl.Message(content=f"Marked **{title_part}** as applied. Saved to your tracker.").send()
+    else:
+        await cl.Message(
+            content=f"Marked **{title_part}** as applied for this session, but saving to storage failed. "
+                    f"It won't persist to your next visit."
+        ).send()
+
+
+@cl.action_callback("view_tracker")
+async def on_view_tracker(action: cl.Action):
+    """Show a summary of everything tracked for this user across all searches."""
+    tracker_record = cl.user_session.get("tracker_record")
+
+    if tracker_record is None:
+        await cl.Message(
+            content="No tracker data for this session. The Job Tracker needs an email entered at the start of the chat."
+        ).send()
+        return
+
+    summary = summarize_tracker(tracker_record)
+    counts = summary["counts"]
+
+    output = (
+        f"## Your Job Tracker\n\n"
+        f"**{summary['total_unique_jobs']}** unique jobs seen across **{summary['total_searches']}** searches.\n\n"
+        f"| Status | Count |\n|---|---|\n"
+        f"| {JOB_STATUS_LABELS['applied']} | {counts['applied']} |\n"
+        f"| {JOB_STATUS_LABELS['interested']} | {counts['interested']} |\n"
+        f"| {JOB_STATUS_LABELS['not_interested']} | {counts['not_interested']} |\n"
+        f"| {JOB_STATUS_LABELS['new']} | {counts['new']} |\n\n"
+    )
+
+    applied_jobs = []
+    for search in tracker_record.get("searches", []):
+        for job in search.get("jobs", []):
+            if job.get("status") == "applied":
+                applied_jobs.append(job)
+
+    if applied_jobs:
+        output += "### Jobs You've Applied To\n\n"
+        for job in applied_jobs:
+            link = f" - [Apply link]({job['apply_link']})" if job.get("apply_link") else ""
+            output += f"- **{job.get('title', '')}** at {job.get('company', '')}{link}\n"
+
+    await cl.Message(content=output).send()
 
 
 # ── Compare Mode Callbacks ─────────────────────────────────────────────────

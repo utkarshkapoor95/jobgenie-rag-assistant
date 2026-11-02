@@ -35,6 +35,17 @@ SUPPORTED_COUNTRIES = {
 # ── Job Search Defaults ───────────────────────────────────────────────────
 MAX_JOBS_TO_SCORE = 8
 
+# ── Job Tracker (persistent storage) ──────────────────────────────────────
+# Requires two Space secrets: JOBGENIE_DATASET_REPO (e.g. "Utkarsh94123/jobgenie-data")
+# and HF_TOKEN (a token with write access to datasets). If either is missing,
+# storage.py degrades gracefully and the app runs without memory, same as before.
+JOB_STATUS_LABELS = {
+    "new": "New",
+    "applied": "Applied",
+    "interested": "Interested",
+    "not_interested": "Not Interested",
+}
+
 # ── Skill Detection (quick regex-free check on resume text) ───────────────
 SKILL_KEYWORDS = [
     "SQL", "Python", "Power BI", "Excel", "LangChain", "Pinecone",
