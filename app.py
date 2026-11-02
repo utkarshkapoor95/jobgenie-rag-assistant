@@ -28,6 +28,8 @@ tiny state machine. No Ask* is ever called from within an action_callback
 anywhere in this file.
 """
 
+import asyncio
+
 import chainlit as cl
 from dotenv import load_dotenv
 
@@ -255,8 +257,6 @@ async def run_search_and_show_results(job_title: str, country_code: str, city: s
                 new_job_keys.add(key)
 
     output_md = format_job_search_results(results, job_title, city, country_name, new_job_keys)
-    if results.get("jobs"):
-        output_md += "\n\n*Job listings powered by [JSearch](https://www.openwebninja.com/api/jsearch)*"
     await cl.Message(content=output_md).send()
 
     # ── Job Tracker: save this search and show status buttons per job ──
@@ -528,9 +528,34 @@ async def on_qa(action: cl.Action):
 
 # ── Job Tracker Callbacks ───────────────────────────────────────────────────
 
+async def _background_save(user_id: str, tracker_record: dict, title_part: str):
+    """
+    Runs the actual HuggingFace upload in the background, off the main
+    session loop. HuggingFace's Dataset API rate-limits rapid successive
+    commits (confirmed via their own community forum: small, frequent
+    commits from the same repo can take minutes once rate-limited). If
+    on_mark_applied awaited this directly, clicking several "Applied"
+    buttons in a row would queue one slow commit after another and freeze
+    the whole chat session until each one finished, exactly what happened.
+    Running it as a background task lets the UI confirm instantly while
+    this finishes whenever HuggingFace actually responds.
+    """
+    saved = save_user(user_id, tracker_record)
+    if not saved:
+        await cl.Message(
+            content=f"Note: saving **{title_part}** to long-term storage failed in the background. "
+                    f"It's marked for this session but may not persist to your next visit."
+        ).send()
+
+
 @cl.action_callback("mark_applied")
 async def on_mark_applied(action: cl.Action):
-    """User marked a specific job as applied. No Ask* calls here, safe to use."""
+    """
+    User marked a specific job as applied. Updates in-memory state and
+    confirms instantly; the slow network save to HuggingFace runs as a
+    background task so repeated clicks never block the chat (see
+    _background_save for why this was necessary).
+    """
     job_key = action.payload.get("job_key", "")
     tracker_record = cl.user_session.get("tracker_record")
     user_id = cl.user_session.get("user_id")
@@ -541,16 +566,12 @@ async def on_mark_applied(action: cl.Action):
 
     tracker_record = update_job_status(tracker_record, job_key, "applied")
     cl.user_session.set("tracker_record", tracker_record)
-    saved = save_user(user_id, tracker_record)
 
     title_part = job_key.split("::", 1)[-1] if "::" in job_key else job_key
-    if saved:
-        await cl.Message(content=f"Marked **{title_part}** as applied. Saved to your tracker.").send()
-    else:
-        await cl.Message(
-            content=f"Marked **{title_part}** as applied for this session, but saving to storage failed. "
-                    f"It won't persist to your next visit."
-        ).send()
+    await cl.Message(content=f"Marked **{title_part}** as applied.").send()
+
+    # Fire-and-forget: does not block this callback or any future click.
+    asyncio.create_task(_background_save(user_id, tracker_record, title_part))
 
 
 @cl.action_callback("view_tracker")
