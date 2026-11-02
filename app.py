@@ -133,74 +133,87 @@ def format_comparison_md(jobs: list) -> str:
     return f"## Side-by-Side Comparison\n\n{table}{recommendation}"
 
 
-def format_job_search_results(
-    results: dict, job_title: str, city: str, country_name: str, new_job_keys: set = None
-) -> str:
-    """Format the full job search pipeline output as markdown."""
-    jobs = results.get("jobs", [])
+def format_results_header(results: dict, job_title: str, city: str, country_name: str) -> str:
+    """Short intro message sent before the per-job messages: title, counts, no job details."""
     total_found = results.get("total_found", 0)
+    jobs = results.get("jobs", [])
+    return (
+        f"## Matching Jobs for \"{job_title}\" in {city or 'Any City'}, {country_name}\n\n"
+        f"Found {total_found} listings, scored the top {len(jobs)} against your resume:"
+    )
+
+
+def format_single_job(job: dict, index: int, new_job_keys: set = None) -> str:
+    """
+    Formats ONE job as its own markdown block. Used so each job's buttons
+    (Applied/Interested/Not interested) can be attached to the SAME message
+    as that job's own description, instead of a separate message the user
+    has to scroll back to match against. Previously all 8 jobs were one
+    combined message, with status buttons in disconnected messages below.
+    """
     new_job_keys = new_job_keys or set()
+    fit = job.get("fit_score", 0)
+    bars = "\u2588" * (fit // 10) + "\u2591" * (10 - fit // 10)
+    salary_line = ""
+    if job.get("salary_min") or job.get("salary_max"):
+        smin = job.get("salary_min")
+        smax = job.get("salary_max")
+        if smin and smax:
+            salary_line = f"\n**Salary:** {int(smin):,} - {int(smax):,}"
+        elif smin:
+            salary_line = f"\n**Salary:** {int(smin):,}+"
 
-    if not jobs:
-        return (
-            f"## No Results\n\n"
-            f"Couldn't find listings for **{job_title}** in **{city or 'any location'}, {country_name}**. "
-            f"Try a broader job title or a different city."
-        )
+    key = f"{job.get('company', '')}::{job.get('title', '')}"
+    new_tag = " `NEW`" if key in new_job_keys else ""
 
-    output = f"## Matching Jobs for \"{job_title}\" in {city or 'Any City'}, {country_name}\n\n"
-    output += f"Found {total_found} listings, scored the top {len(jobs)} against your resume:\n\n"
+    output = (
+        f"### {index}. {job.get('title', 'Untitled')} - {job.get('company', 'Unknown')}{new_tag}\n"
+        f"**Fit Score:** `{bars}` {fit}%  \n"
+        f"**Location:** {job.get('location', 'Not specified')}"
+        f"{salary_line}\n\n"
+        f"{job.get('one_line_reason', '')}\n\n"
+    )
+    matched = job.get("matched_skills", [])
+    missing = job.get("missing_skills", [])
+    if matched:
+        output += f"**You have:** {', '.join(matched[:5])}\n\n"
+    if missing:
+        output += f"**Missing:** {', '.join(missing[:5])}\n\n"
+    if job.get("apply_link"):
+        output += f"[**Apply Here**]({job['apply_link']})"
 
-    for i, job in enumerate(jobs, 1):
-        fit = job.get("fit_score", 0)
-        bars = "\u2588" * (fit // 10) + "\u2591" * (10 - fit // 10)
-        salary_line = ""
-        if job.get("salary_min") or job.get("salary_max"):
-            smin = job.get("salary_min")
-            smax = job.get("salary_max")
-            if smin and smax:
-                salary_line = f"\n**Salary:** {int(smin):,} - {int(smax):,}"
-            elif smin:
-                salary_line = f"\n**Salary:** {int(smin):,}+"
+    return output
 
-        key = f"{job.get('company', '')}::{job.get('title', '')}"
-        new_tag = " `NEW`" if key in new_job_keys else ""
 
-        output += (
-            f"### {i}. {job.get('title', 'Untitled')} - {job.get('company', 'Unknown')}{new_tag}\n"
-            f"**Fit Score:** `{bars}` {fit}%  \n"
-            f"**Location:** {job.get('location', 'Not specified')}"
-            f"{salary_line}\n\n"
-            f"{job.get('one_line_reason', '')}\n\n"
-        )
-        matched = job.get("matched_skills", [])
-        missing = job.get("missing_skills", [])
-        if matched:
-            output += f"**You have:** {', '.join(matched[:5])}\n\n"
-        if missing:
-            output += f"**Missing:** {', '.join(missing[:5])}\n\n"
-        if job.get("apply_link"):
-            output += f"[**Apply Here**]({job['apply_link']})\n\n"
-        output += "---\n\n"
+def format_no_results(job_title: str, city: str, country_name: str) -> str:
+    return (
+        f"## No Results\n\n"
+        f"Couldn't find listings for **{job_title}** in **{city or 'any location'}, {country_name}**. "
+        f"Try a broader job title or a different city."
+    )
 
+
+def format_missing_skills_summary(results: dict) -> str:
+    """Formats the 'What's Holding You Back' section as its own message, sent last."""
     missing_summary = results.get("missing_skills_summary", [])
-    if missing_summary:
-        output += "## What's Holding You Back\n\n"
-        output += (
-            "Across all the listings above, here's what comes up most often "
-            "as a gap, with where to learn it:\n\n"
-        )
-        for item in missing_summary:
-            output += (
-                f"**{item['skill']}** - missing in {item['appears_in']} of "
-                f"{item['total_jobs']} listings\n"
-            )
-            output += (
-                f"[YouTube]({item['youtube']}) | "
-                f"[freeCodeCamp]({item['freecodecamp']}) | "
-                f"[Coursera]({item['coursera']})\n\n"
-            )
+    if not missing_summary:
+        return ""
 
+    output = "## What's Holding You Back\n\n"
+    output += (
+        "Across all the listings above, here's what comes up most often "
+        "as a gap, with where to learn it:\n\n"
+    )
+    for item in missing_summary:
+        output += (
+            f"**{item['skill']}** - missing in {item['appears_in']} of "
+            f"{item['total_jobs']} listings\n"
+        )
+        output += (
+            f"[YouTube]({item['youtube']}) | "
+            f"[freeCodeCamp]({item['freecodecamp']}) | "
+            f"[Coursera]({item['coursera']})\n\n"
+        )
     return output
 
 
@@ -283,49 +296,63 @@ async def run_search_and_show_results(job_title: str, country_code: str, city: s
         )
         step.output = f"Found {results.get('total_found', 0)} listings, scored top {len(results.get('jobs', []))}."
 
+    jobs = results.get("jobs", [])
+
+    if not jobs:
+        await cl.Message(content=format_no_results(job_title, city, country_name)).send()
+        await send_next_steps_menu()
+        return
+
     # ── Job Tracker: figure out which jobs are new since the user's last visit ──
     tracker_record = cl.user_session.get("tracker_record")
     new_job_keys = set()
     if tracker_record is not None:
         previously_seen = get_all_seen_job_keys(tracker_record, exclude_latest=False)
-        for job in results.get("jobs", []):
+        for job in jobs:
             key = f"{job.get('company', '')}::{job.get('title', '')}"
             if key not in previously_seen:
                 new_job_keys.add(key)
 
-    output_md = format_job_search_results(results, job_title, city, country_name, new_job_keys)
-    await cl.Message(content=output_md).send()
+    # Short header first (title + count), no job details, so it doesn't
+    # repeat what's about to be shown per-job below.
+    await cl.Message(content=format_results_header(results, job_title, city, country_name)).send()
 
-    # ── Job Tracker: save this search and show status buttons per job ──
-    if tracker_record is not None and results.get("jobs"):
-        tracker_record = record_search(tracker_record, job_title, country_code, city, results["jobs"])
+    # ── Job Tracker: save this search (fire-and-forget, see _background_save) ──
+    if tracker_record is not None:
+        tracker_record = record_search(tracker_record, job_title, country_code, city, jobs)
         cl.user_session.set("tracker_record", tracker_record)
         user_id = cl.user_session.get("user_id")
-
-        # Same fire-and-forget pattern as mark_applied, for the same reason:
-        # HuggingFace rate-limits rapid successive commits (confirmed earlier
-        # this session), so this save should never block the next message.
         title_part = f"search results for {job_title}"
         asyncio.create_task(_background_save(user_id, tracker_record, title_part))
 
-        # One short message per job, each with its own three status buttons,
-        # instead of three long walls of 8 buttons each grouped by status.
-        # Previously a user had to cross-reference "Applied: X" against
-        # "Interested: X" against "Not interested: X" across three separate
-        # messages to find one job's three options; here they sit together,
-        # right under that job's own number, matching the numbering already
-        # used in the results list above.
-        for i, job in enumerate(results["jobs"][:8], 1):
-            key = f"{job.get('company', '')}::{job.get('title', '')}"
-            short_label = job.get("title", "")[:34]
+    # One message PER job, with that job's own three status buttons attached
+    # directly to it (Chainlit renders a message's actions right below its
+    # content). This replaces the earlier version where job descriptions
+    # were one combined message and status buttons were separate messages
+    # below, which forced scrolling back and forth to match a button group
+    # to the job it belonged to. Now each job is fully self-contained: its
+    # own fit score, skills, apply link, and buttons, all in one place.
+    for i, job in enumerate(jobs[:8], 1):
+        key = f"{job.get('company', '')}::{job.get('title', '')}"
+        job_content = format_single_job(job, i, new_job_keys)
+
+        if tracker_record is not None:
             await cl.Message(
-                content=f"**#{i}** {short_label}:",
+                content=job_content,
                 actions=[
                     cl.Action(name="mark_applied", payload={"job_key": key}, label="Applied"),
                     cl.Action(name="mark_interested", payload={"job_key": key}, label="Interested"),
                     cl.Action(name="mark_not_interested", payload={"job_key": key}, label="Not interested"),
                 ],
             ).send()
+        else:
+            # Tracker not configured for this session: show the job with no
+            # status buttons, same as before storage was ever added.
+            await cl.Message(content=job_content).send()
+
+    missing_skills_md = format_missing_skills_summary(results)
+    if missing_skills_md:
+        await cl.Message(content=missing_skills_md).send()
 
     await send_next_steps_menu()
 
