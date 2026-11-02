@@ -258,6 +258,25 @@
     overflow: visible;
   }
 
+  /* Traveling pulse: a short dash that animates along each connector line
+     on a loop, using stroke-dasharray/stroke-dashoffset, the standard CSS/
+     SVG technique for a "flowing data" effect without any 3D or WebGL. */
+  .flow-pulse {
+    stroke-dasharray: 18 400;
+    stroke-dashoffset: 0;
+    animation: flowAlong 2.4s linear infinite;
+    opacity: 0.9;
+  }
+
+  @keyframes flowAlong {
+    from { stroke-dashoffset: 110; }
+    to { stroke-dashoffset: -18; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .flow-pulse { animation: none; opacity: 0; }
+  }
+
   /* The SVG's internal text becomes illegible once the viewBox is scaled
      down below roughly 600px wide. Below that, a simple vertical list of
      the same four stages replaces it instead of shrinking into unreadable
@@ -511,17 +530,26 @@
   <section class="section" id="how">
     <div class="section-label">How it works</div>
 
-    <svg class="workflow-diagram" viewBox="0 0 920 140" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Workflow: Resume PDF to Pinecone embeddings, to Groq LLM title suggestion, to JSearch live listings scored by Groq, to HuggingFace Dataset storage">
+    <svg class="workflow-diagram" viewBox="0 0 1040 140" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Workflow: Resume PDF to Pinecone embeddings, to Groq LLM title suggestion, to JSearch live listings scored by Groq, to HuggingFace Dataset storage, to ranked results shown to the user">
       <defs>
         <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
           <path d="M0,0 L6,3 L0,6 Z" fill="var(--accent)" />
         </marker>
       </defs>
 
+      <!-- Base connector lines (static, always visible) -->
       <line x1="105" y1="70" x2="215" y2="70" stroke="var(--border)" stroke-width="2" marker-end="url(#arrowhead)" />
       <line x1="325" y1="70" x2="435" y2="70" stroke="var(--border)" stroke-width="2" marker-end="url(#arrowhead)" />
       <line x1="545" y1="70" x2="655" y2="70" stroke="var(--border)" stroke-width="2" marker-end="url(#arrowhead)" />
       <line x1="765" y1="70" x2="875" y2="70" stroke="var(--border)" stroke-width="2" marker-end="url(#arrowhead)" />
+
+      <!-- Traveling pulse on each connector: a short dash animated along the
+           full line length on a loop, giving the sense of data flowing node
+           to node without any 3D/WebGL, pure CSS/SVG animation. -->
+      <line class="flow-pulse" style="animation-delay: 0s"    x1="105" y1="70" x2="215" y2="70" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" />
+      <line class="flow-pulse" style="animation-delay: 0.6s"  x1="325" y1="70" x2="435" y2="70" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" />
+      <line class="flow-pulse" style="animation-delay: 1.2s"  x1="545" y1="70" x2="655" y2="70" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" />
+      <line class="flow-pulse" style="animation-delay: 1.8s"  x1="765" y1="70" x2="875" y2="70" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" />
 
       <g>
         <rect x="5" y="30" width="100" height="80" rx="10" fill="var(--bg-card)" stroke="var(--border)" />
@@ -551,9 +579,14 @@
         <text x="710" y="92" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="Inter, sans-serif">HF Dataset</text>
       </g>
 
+      <!-- The payoff node: previously a dead-end arrow with nothing after
+           it. This is what the whole diagram has been building toward,
+           the actual output the user sees. -->
       <g>
-        <rect x="875" y="30" width="40" height="80" rx="10" fill="var(--accent-dim)" stroke="var(--accent)" opacity="0.5" />
-        <text x="895" y="74" text-anchor="middle" fill="var(--accent)" font-size="16" font-family="Inter, sans-serif">&#8594;</text>
+        <rect x="875" y="30" width="160" height="80" rx="10" fill="var(--accent-dim)" stroke="var(--accent)" stroke-width="1.5" />
+        <text x="955" y="52" text-anchor="middle" fill="var(--text)" font-size="12" font-weight="600" font-family="Inter, sans-serif">Ranked results</text>
+        <text x="955" y="68" text-anchor="middle" fill="var(--text)" font-size="12" font-weight="600" font-family="Inter, sans-serif">shown to you</text>
+        <text x="955" y="92" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="Inter, sans-serif">Fit % + skill gaps</text>
       </g>
     </svg>
 

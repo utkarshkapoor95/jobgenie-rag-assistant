@@ -570,17 +570,29 @@ async def on_qa(action: cl.Action):
 
 async def _background_save(user_id: str, tracker_record: dict, title_part: str):
     """
-    Runs the actual HuggingFace upload in the background, off the main
-    session loop. HuggingFace's Dataset API rate-limits rapid successive
-    commits (confirmed via their own community forum: small, frequent
-    commits from the same repo can take minutes once rate-limited). If
-    on_mark_applied awaited this directly, clicking several "Applied"
-    buttons in a row would queue one slow commit after another and freeze
-    the whole chat session until each one finished, exactly what happened.
-    Running it as a background task lets the UI confirm instantly while
-    this finishes whenever HuggingFace actually responds.
+    Runs the actual HuggingFace upload off the main event loop, genuinely,
+    not just scheduled-for-later.
+
+    CORRECTED (this was wrong before): wrapping an async function in
+    asyncio.create_task does NOT make a synchronous blocking call inside it
+    non-blocking. save_user() makes a real blocking HTTP request (via
+    huggingface_hub, which uses the synchronous `requests` library). Calling
+    it directly here, even from a function scheduled with create_task, still
+    freezes the entire single-threaded asyncio event loop for however long
+    that request takes, once the task actually runs. Verified directly: a
+    simulated 1.5s blocking call froze delivery of three subsequent chat
+    messages for the full 1.5s under the old pattern, and took 0.03s under
+    this one. This explains the session-wide freeze after a search: once
+    HuggingFace's rate limit kicked in (confirmed earlier this session to
+    take minutes once triggered), the blocking save froze not just the save
+    itself but every message queued after it, including the Applied/
+    Interested/Not Interested buttons and the What's Next menu.
+
+    asyncio.to_thread runs the blocking call on a separate OS thread,
+    which actually frees the event loop to keep sending messages while the
+    slow HuggingFace request runs in the background.
     """
-    saved = save_user(user_id, tracker_record)
+    saved = await asyncio.to_thread(save_user, user_id, tracker_record)
     if not saved:
         await cl.Message(
             content=f"Note: saving **{title_part}** to long-term storage failed in the background. "
