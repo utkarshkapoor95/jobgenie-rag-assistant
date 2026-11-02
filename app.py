@@ -228,6 +228,29 @@ async def send_country_prompt():
     ).send()
 
 
+async def send_next_steps_menu(heading: str = "**What's next?**"):
+    """
+    Sends the full action menu: Search Again, Analyze a JD, Compare JDs,
+    Ask About Profile, View Tracker. Used after every terminal point in the
+    conversation (job search results, Q&A answers, JD analysis, JD
+    comparisons), not just after a job search, so the user is never stuck
+    scrolling up to find these buttons after asking a follow-up question.
+    Never called from inside an action_callback chain that has used an
+    Ask* method earlier in the same call stack (see the module docstring's
+    note on GitHub issue #2204).
+    """
+    await cl.Message(
+        content=heading,
+        actions=[
+            cl.Action(name="restart_search", payload={"action": "restart"}, label="Search Again"),
+            cl.Action(name="mode_single", payload={"mode": "single"}, label="Analyze a Single JD"),
+            cl.Action(name="mode_compare", payload={"mode": "compare"}, label="Compare Multiple JDs"),
+            cl.Action(name="mode_qa", payload={"mode": "qa"}, label="Ask About My Profile"),
+            cl.Action(name="view_tracker", payload={"action": "tracker"}, label="View My Tracker"),
+        ],
+    ).send()
+
+
 async def run_search_and_show_results(job_title: str, country_code: str, city: str):
     """
     Runs the search, shows results, then shows the secondary ('What's next?')
@@ -236,6 +259,20 @@ async def run_search_and_show_results(job_title: str, country_code: str, city: s
     """
     resume_text = cl.user_session.get("resume_text", "")
     country_name = SUPPORTED_COUNTRIES.get(country_code, "India")
+
+    # The search + scoring pipeline takes 10-15 seconds (one JSearch call,
+    # then one Groq call per job). Previously there was no message before
+    # this started, so the 10-15 second wait read as the app being frozen.
+    # Chainlit only pushes a Step's content to the UI when it exits (or via
+    # an explicit await step.update()), not by just setting attributes
+    # mid-loop, so a live per-job counter inside the step isn't reliable
+    # without further verification. This uses the simpler, already-proven
+    # pattern from the resume upload fix: a plain message sent before the
+    # slow work starts, so the user sees it immediately regardless of how
+    # the step itself renders.
+    await cl.Message(
+        content=f"Searching live listings for **{job_title}** and scoring each one against your resume, this takes about 10-15 seconds..."
+    ).send()
 
     async with cl.Step(name="Searching live job listings") as step:
         results = run_job_search_pipeline(
@@ -285,39 +322,24 @@ async def run_search_and_show_results(job_title: str, country_code: str, city: s
                 actions=status_actions[:8],
             ).send()
 
-    await cl.Message(
-        content="**What's next?**",
-        actions=[
-            cl.Action(name="restart_search", payload={"action": "restart"}, label="Search Again"),
-            cl.Action(name="mode_single", payload={"mode": "single"}, label="Analyze a Single JD"),
-            cl.Action(name="mode_compare", payload={"mode": "compare"}, label="Compare Multiple JDs"),
-            cl.Action(name="mode_qa", payload={"mode": "qa"}, label="Ask About My Profile"),
-            cl.Action(name="view_tracker", payload={"action": "tracker"}, label="View My Tracker"),
-        ],
-    ).send()
+    await send_next_steps_menu()
 
 
 # ── Chat Start ─────────────────────────────────────────────────────────────
 
 @cl.on_chat_start
 async def start():
-    # The welcome message's step numbering depends on whether storage is
-    # configured, since that decides whether an email question comes before
-    # the resume upload. Previously this always said "Step 1: Upload your
-    # resume" even when an email question was about to appear first.
-    if storage_is_configured():
-        welcome_steps = (
-            "**Step 1:** Enter your email so I can save your search history.\n\n"
-            "**Step 2:** Upload your resume PDF."
-        )
-    else:
-        welcome_steps = "**Step 1:** Upload your resume PDF to get started."
-
+    # No separate "Step 1 / Step 2" preview here anymore: it previously
+    # restated almost the same sentence as the question that immediately
+    # followed it ("Enter your email so I can save your search history"
+    # directly above "Enter your email (used only to save...)"), which
+    # read as repetitive. The questions below are self-explanatory on
+    # their own, so the welcome message just sets context, not a
+    # duplicate script of what's about to be asked.
     await cl.Message(
         content=(
             "# Welcome to **JobGenie**!\n\n"
-            "I'm your RAG-powered job research assistant.\n\n"
-            f"{welcome_steps}"
+            "I'm your RAG-powered job research assistant. Let's get started."
         )
     ).send()
 
@@ -643,14 +665,7 @@ async def on_run_comparison(action: cl.Action):
 
     cl.user_session.set("compare_jds_list", [])
     cl.user_session.set("mode", "single")
-    await cl.Message(
-        content="Comparison complete! What's next?",
-        actions=[
-            cl.Action(name="restart_search", payload={"action": "restart"}, label="Search Again"),
-            cl.Action(name="mode_compare", payload={"mode": "compare"}, label="Compare Again"),
-            cl.Action(name="mode_qa", payload={"mode": "qa"}, label="Ask About My Profile"),
-        ],
-    ).send()
+    await send_next_steps_menu("**Comparison complete! What's next?**")
 
 
 # ── Message Handler (state machine for flow_stage, plus everything else) ───
@@ -722,6 +737,7 @@ async def on_message(message: cl.Message):
         prompt = PROMPT_QA.format(resume_text=resume_text[:3000], question=jd_text)
         response = llm.invoke(prompt)
         await cl.Message(content=response.content).send()
+        await send_next_steps_menu("**Ask me anything else, or pick an option:**")
         return
 
     # ── Single JD analysis (default) ──
@@ -772,14 +788,10 @@ async def on_message(message: cl.Message):
 
     await cl.Message(
         content=(
-            "**Analysis complete!** What's next?\n\n"
+            "**Analysis complete!** You can also just ask a follow-up directly, for example:\n\n"
             "- *'Rewrite the pitch more confidently'*\n"
             "- *'Give me 5 more behavioral questions'*\n"
             "- *'What salary should I ask for this role?'*"
-        ),
-        actions=[
-            cl.Action(name="restart_search", payload={"action": "restart"}, label="Find Matching Jobs"),
-            cl.Action(name="mode_compare", payload={"mode": "compare"}, label="Compare Multiple JDs"),
-            cl.Action(name="mode_qa", payload={"mode": "qa"}, label="Ask About My Profile"),
-        ],
+        )
     ).send()
+    await send_next_steps_menu()
