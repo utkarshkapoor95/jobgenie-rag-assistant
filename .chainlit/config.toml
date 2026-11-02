@@ -1,0 +1,38 @@
+[project]
+# Whether to enable telemetry (default: true). No personal data is collected.
+enable_telemetry = true
+
+[features]
+# Process and display HTML in messages.
+unsafe_allow_html = false
+# Process and display mathematical expressions.
+latex = false
+# Authorize users to upload files with messages
+multi_modal = true
+
+[UI]
+# Name of the assistant, shown in the browser tab and header.
+name = "JobGenie"
+# Default theme on load. The app was designed and screenshotted against dark,
+# so dark is the default here rather than Chainlit's own light default.
+default_theme = "dark"
+
+# Fixes low contrast between the user's own messages and JobGenie's replies
+# on the default dark theme (both previously read as nearly the same shade,
+# making it hard to tell who said what at a glance). primary.main is the
+# accent used for the user's message bubble; paper is the background behind
+# assistant replies. Keeping these visually distinct from each other and
+# from the page background (#0F1419, matched to the GitHub Pages landing
+# page's own color scheme) is the actual fix.
+[UI.theme.dark]
+background = "#0F1419"
+paper = "#1C2430"
+
+[UI.theme.dark.primary]
+main = "#5B8C7E"
+dark = "#3E5F55"
+light = "#8FB8AA"
+
+[UI.theme.dark.text]
+primary = "#F5F3EE"
+secondary = "#8B95A3"

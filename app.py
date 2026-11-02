@@ -301,11 +301,23 @@ async def run_search_and_show_results(job_title: str, country_code: str, city: s
 
 @cl.on_chat_start
 async def start():
+    # The welcome message's step numbering depends on whether storage is
+    # configured, since that decides whether an email question comes before
+    # the resume upload. Previously this always said "Step 1: Upload your
+    # resume" even when an email question was about to appear first.
+    if storage_is_configured():
+        welcome_steps = (
+            "**Step 1:** Enter your email so I can save your search history.\n\n"
+            "**Step 2:** Upload your resume PDF."
+        )
+    else:
+        welcome_steps = "**Step 1:** Upload your resume PDF to get started."
+
     await cl.Message(
         content=(
             "# Welcome to **JobGenie**!\n\n"
             "I'm your RAG-powered job research assistant.\n\n"
-            "**Step 1:** Upload your resume PDF to get started."
+            f"{welcome_steps}"
         )
     ).send()
 
