@@ -325,7 +325,16 @@ async def start():
         ).send()
         if id_res and id_res["output"].strip():
             user_id = id_res["output"].strip()
-            tracker_record, returning = get_or_create_user(user_id)
+
+            # The lookup below is a real network call to HuggingFace (checking
+            # whether this email has a saved record) and was previously silent,
+            # leaving a multi-second gap with no feedback. cl.Step gives instant
+            # visible acknowledgment the moment the email is submitted, before
+            # that network call starts.
+            async with cl.Step(name="Checking your saved history...") as step:
+                tracker_record, returning = get_or_create_user(user_id)
+                step.output = "Found a saved record." if returning else "No saved record, starting fresh."
+
             cl.user_session.set("user_id", user_id)
             cl.user_session.set("tracker_record", tracker_record)
 
@@ -355,6 +364,13 @@ async def start():
         return
 
     resume_file = files[0]
+
+    # Instant acknowledgment the moment the file lands, before the slow
+    # embedding model load and Pinecone connection begin. Previously the
+    # cl.Step spinner below was the only feedback, and on a cold free-tier
+    # container the model load alone can take 10+ seconds with nothing
+    # visible changing on screen in that window.
+    await cl.Message(content="Got your resume, reading it now...").send()
 
     async with cl.Step(name="Processing your resume...") as step:
         try:

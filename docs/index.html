@@ -171,7 +171,35 @@
     border-radius: 2px;
     overflow: hidden;
   }
-  .job-card .bar-fill { height: 100%; background: var(--accent); }
+  .job-card .bar-fill { height: 100%; background: var(--accent); transition: width 0.5s ease; }
+
+  /* ── Hero toggle (interactive demo) ── */
+  .hero-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .toggle-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+  .toggle-btn:hover { color: var(--text); }
+  .toggle-btn.active {
+    border-color: var(--accent);
+    color: var(--text);
+    background: var(--accent-dim);
+  }
+
+  .job-card .fit span:last-child { transition: color 0.3s ease; }
+  .fit-value { display: inline-block; min-width: 34px; text-align: right; }
 
   /* ── How it works ── */
   .section { padding: 70px 0; border-top: 1px solid var(--border); }
@@ -179,8 +207,8 @@
 
   .steps {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 32px;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 32px 40px;
     margin-top: 28px;
   }
 
@@ -212,6 +240,26 @@
 
   .feature h3 { font-size: 1rem; margin-bottom: 8px; font-weight: 600; }
   .feature p { color: var(--text-muted); font-size: 0.92rem; }
+
+  /* Lead pair: visually heavier than the supporting features below them,
+     since these two are the actual differentiator, not just more features. */
+  .features-lead { margin-top: 10px; }
+  .feature-lead {
+    background: var(--bg-card);
+    padding: 30px 28px;
+  }
+  .feature-lead h3 { font-size: 1.1rem; color: var(--text); }
+  .feature-lead h3::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .feature-lead p { font-size: 0.95rem; }
 
   /* ── Stack ── */
   .stack-row {
@@ -285,73 +333,106 @@
   <section class="hero">
     <div class="hero-text">
       <h1>Turn your resume into a ranked shortlist.</h1>
-      <p>Upload a resume. JobGenie suggests matching job titles, pulls live listings, and scores each one against what you actually have, skills matched, skills missing, and where to learn them.</p>
+      <p>Upload a resume. JobGenie suggests matching job titles, pulls live listings from LinkedIn, Indeed and dozens of other boards in one search, and scores each one against what you actually have, skills matched, skills missing, and where to learn them.</p>
       <div class="hero-cta">
         <a href="https://huggingface.co/spaces/Utkarsh94123/jobgenie-rag-assistant" class="btn-primary">Try it live</a>
         <a href="https://github.com/utkarshkapoor95/jobgenie-rag-assistant" class="link-secondary">View the code</a>
       </div>
     </div>
 
-    <div class="demo-visual">
-      <div class="resume-doc" aria-hidden="true">
-        <div class="line w90"></div>
-        <div class="line w60"></div>
-        <div class="line w80"></div>
-        <div class="line w40"></div>
-        <div class="line w60"></div>
-        <div class="line w80"></div>
-        <div class="line w40"></div>
+    <div>
+      <div class="hero-toggle" role="group" aria-label="See how the fit score changes with different skills">
+        <button class="toggle-btn active" id="toggle-full" onclick="setHeroState('full')" type="button">Full skill set</button>
+        <button class="toggle-btn" id="toggle-missing" onclick="setHeroState('missing')" type="button">Without automation skills</button>
       </div>
-      <div class="flow-arrow" aria-hidden="true">&rarr;</div>
-      <div class="job-cards" aria-hidden="true">
-        <div class="job-card">
-          <div class="fit"><span>AI Solutions Engineer</span><span>68%</span></div>
-          <div class="bar-track"><div class="bar-fill" style="width: 68%"></div></div>
+      <div class="demo-visual">
+        <div class="resume-doc" aria-hidden="true">
+          <div class="line w90"></div>
+          <div class="line w60" id="demo-line-automation"></div>
+          <div class="line w80"></div>
+          <div class="line w40"></div>
+          <div class="line w60"></div>
+          <div class="line w80"></div>
+          <div class="line w40"></div>
         </div>
-        <div class="job-card">
-          <div class="fit"><span>Marketing Automation</span><span>55%</span></div>
-          <div class="bar-track"><div class="bar-fill" style="width: 55%"></div></div>
-        </div>
-        <div class="job-card">
-          <div class="fit"><span>GTM Engineer</span><span>45%</span></div>
-          <div class="bar-track"><div class="bar-fill" style="width: 45%"></div></div>
+        <div class="flow-arrow" aria-hidden="true">&rarr;</div>
+        <div class="job-cards" aria-hidden="true">
+          <div class="job-card">
+            <div class="fit"><span>AI Solutions Engineer</span><span class="fit-value" id="score-1">68%</span></div>
+            <div class="bar-track"><div class="bar-fill" id="bar-1" style="width: 68%"></div></div>
+          </div>
+          <div class="job-card">
+            <div class="fit"><span>Marketing Automation</span><span class="fit-value" id="score-2">55%</span></div>
+            <div class="bar-track"><div class="bar-fill" id="bar-2" style="width: 55%"></div></div>
+          </div>
+          <div class="job-card">
+            <div class="fit"><span>GTM Engineer</span><span class="fit-value" id="score-3">45%</span></div>
+            <div class="bar-track"><div class="bar-fill" id="bar-3" style="width: 45%"></div></div>
+          </div>
         </div>
       </div>
     </div>
   </section>
+
+  <script>
+    const heroScores = {
+      full:    { s1: 68, s2: 55, s3: 45 },
+      missing: { s1: 31, s2: 22, s3: 19 }
+    };
+    function setHeroState(state) {
+      const scores = heroScores[state];
+      document.getElementById('score-1').textContent = scores.s1 + '%';
+      document.getElementById('score-2').textContent = scores.s2 + '%';
+      document.getElementById('score-3').textContent = scores.s3 + '%';
+      document.getElementById('bar-1').style.width = scores.s1 + '%';
+      document.getElementById('bar-2').style.width = scores.s2 + '%';
+      document.getElementById('bar-3').style.width = scores.s3 + '%';
+      document.getElementById('demo-line-automation').style.opacity = state === 'missing' ? '0.15' : '1';
+      document.getElementById('toggle-full').classList.toggle('active', state === 'full');
+      document.getElementById('toggle-missing').classList.toggle('active', state === 'missing');
+    }
+  </script>
 
   <section class="section" id="how">
     <div class="section-label">How it works</div>
     <div class="steps">
       <div class="step">
         <div class="num">01</div>
-        <h3>Upload your resume</h3>
-        <p>JobGenie reads it, embeds it into a vector index, and suggests three job titles worth searching, picked from what's actually on the page.</p>
+        <h3>Resume becomes searchable</h3>
+        <p>The PDF is parsed, split into chunks, and embedded with a sentence-transformer model into Pinecone, a vector database. This is what lets later questions ("what's my fit for this JD") retrieve the relevant parts of the resume instead of guessing from the whole document at once.</p>
       </div>
       <div class="step">
         <div class="num">02</div>
-        <h3>Pick a title and location</h3>
-        <p>One click on a suggested title, a country, and a city. No long forms, no typing a search query from scratch.</p>
+        <h3>An LLM call suggests titles</h3>
+        <p>A separate Groq call (openai/gpt-oss-120b) reads the embedded resume and proposes three job titles likely to return real search results, not just ones that sound impressive. One click starts the search.</p>
       </div>
       <div class="step">
         <div class="num">03</div>
-        <h3>Get a scored shortlist</h3>
-        <p>Live listings come back ranked by fit, with matched and missing skills called out, plus links to learn whatever's missing.</p>
+        <h3>Live listings get pulled and scored</h3>
+        <p>JSearch queries Google for Jobs' index, which aggregates from LinkedIn, Indeed, company career pages and dozens of smaller boards in one call. Each listing is then scored against the resume by a second LLM call: matched skills, missing skills, and a fit percentage, not a keyword match.</p>
+      </div>
+      <div class="step">
+        <div class="num">04</div>
+        <h3>Your history is remembered</h3>
+        <p>Search results and application status are saved to a small persistent store keyed to your email. Come back later with the same email and JobGenie tells you what's new since your last visit, something a one-off chat session can't do.</p>
       </div>
     </div>
   </section>
 
   <section class="section">
     <div class="section-label">What it tracks for you</div>
-    <div class="features">
-      <div class="feature">
+    <p style="color: var(--text-muted); max-width: 520px; margin-top: 4px;">The two below are the difference between JobGenie and pasting your resume into a chat: a chat forgets you the moment you close it.</p>
+    <div class="features features-lead">
+      <div class="feature feature-lead">
         <h3>Returning-user memory</h3>
-        <p>Come back with the same email and see what's changed since your last search, new listings are flagged automatically.</p>
+        <p>Come back with the same email and see what's changed since your last search, new listings are flagged automatically. No chat session can do this, it has no memory once you close it.</p>
       </div>
-      <div class="feature">
+      <div class="feature feature-lead">
         <h3>Application tracker</h3>
-        <p>Mark a job as applied in one click. Your status is saved and carried forward even if that listing shows up again in a later search.</p>
+        <p>Mark a job as applied in one click. Your status is saved and carried forward even if that listing shows up again in a later search, weeks from now.</p>
       </div>
+    </div>
+    <div class="features" style="margin-top: 1px;">
       <div class="feature">
         <h3>Skill gap aggregation</h3>
         <p>Instead of showing gaps per job, JobGenie rolls them up across every result so you can see what to learn first.</p>
