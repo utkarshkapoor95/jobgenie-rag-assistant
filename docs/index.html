@@ -70,6 +70,30 @@
   }
   .btn-primary:hover { background: #6B9C8E; }
 
+  .btn-primary-large {
+    background: var(--accent);
+    color: var(--bg);
+    padding: 16px 34px;
+    border-radius: var(--radius);
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 1.05rem;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+    display: inline-block;
+    box-shadow: 0 0 0 0 rgba(91, 140, 126, 0.5);
+    animation: ctaPulse 2.5s ease-in-out infinite;
+  }
+  .btn-primary-large:hover { background: #6B9C8E; }
+
+  @keyframes ctaPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(91, 140, 126, 0.35); }
+    50% { box-shadow: 0 0 0 10px rgba(91, 140, 126, 0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .btn-primary-large { animation: none; }
+  }
+
   .btn-primary:focus-visible, a:focus-visible, button:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 3px;
@@ -200,6 +224,76 @@
 
   .job-card .fit span:last-child { transition: color 0.3s ease; }
   .fit-value { display: inline-block; min-width: 34px; text-align: right; }
+
+  /* ── Highlight cards (what makes it different) ── */
+  .highlight-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    margin-top: 28px;
+  }
+
+  .highlight-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    background: var(--bg-card);
+  }
+
+  .highlight-icon {
+    color: var(--accent);
+    font-size: 0.6rem;
+    margin-bottom: 12px;
+  }
+
+  .highlight-card h3 { font-size: 1.05rem; margin-bottom: 10px; font-weight: 600; }
+  .highlight-card p { color: var(--text-muted); font-size: 0.93rem; }
+
+  /* ── Workflow diagram ── */
+  .workflow-diagram {
+    width: 100%;
+    height: auto;
+    margin-top: 24px;
+    margin-bottom: 8px;
+    overflow: visible;
+  }
+
+  /* The SVG's internal text becomes illegible once the viewBox is scaled
+     down below roughly 600px wide. Below that, a simple vertical list of
+     the same four stages replaces it instead of shrinking into unreadable
+     labels. */
+  .workflow-diagram-mobile { display: none; }
+
+  @media (max-width: 600px) {
+    .workflow-diagram { display: none; }
+    .workflow-diagram-mobile {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin-top: 24px;
+    }
+    .workflow-mobile-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+    }
+    .workflow-mobile-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+    .workflow-mobile-step strong { font-size: 0.92rem; display: block; }
+    .workflow-mobile-step span { font-size: 0.8rem; color: var(--text-muted); }
+    .workflow-mobile-connector {
+      width: 1px;
+      height: 18px;
+      background: var(--border);
+      margin-left: 5px;
+    }
+  }
 
   /* ── How it works ── */
   .section { padding: 70px 0; border-top: 1px solid var(--border); }
@@ -335,7 +429,7 @@
       <h1>Turn your resume into a ranked shortlist.</h1>
       <p>Upload a resume. JobGenie suggests matching job titles, pulls live listings from LinkedIn, Indeed and dozens of other boards in one search, and scores each one against what you actually have, skills matched, skills missing, and where to learn them.</p>
       <div class="hero-cta">
-        <a href="https://huggingface.co/spaces/Utkarsh94123/jobgenie-rag-assistant" class="btn-primary">Try it live</a>
+        <a href="https://huggingface.co/spaces/Utkarsh94123/jobgenie-rag-assistant" class="btn-primary-large">Try it live &rarr;</a>
         <a href="https://github.com/utkarshkapoor95/jobgenie-rag-assistant" class="link-secondary">View the code</a>
       </div>
     </div>
@@ -393,8 +487,86 @@
     }
   </script>
 
+  <section class="section">
+    <div class="section-label">What makes it different</div>
+    <p style="max-width: 620px; color: var(--text-muted); font-size: 1.02rem; margin-top: 4px;">
+      Most career tools are a search box or a chatbot, not both. JobGenie is the one that is both:
+      it searches real job boards for you, then lets you ask it anything about your results, your
+      resume, or your career, in the same conversation.
+    </p>
+    <div class="highlight-grid">
+      <div class="highlight-card">
+        <div class="highlight-icon" aria-hidden="true">&#9679;</div>
+        <h3>Real jobs, not a demo dataset</h3>
+        <p>Every listing is pulled live from JSearch, which aggregates Google for Jobs' index, LinkedIn, Indeed, company career pages and dozens of smaller boards. Click "Apply" and you land on the actual listing.</p>
+      </div>
+      <div class="highlight-card">
+        <div class="highlight-icon" aria-hidden="true">&#9679;</div>
+        <h3>Ask it anything about your career</h3>
+        <p>Not just a search tool: ask about salary expectations, how to frame a career switch, which of two job descriptions fits better, or what to say in an interview, grounded in your actual resume.</p>
+      </div>
+    </div>
+  </section>
+
   <section class="section" id="how">
     <div class="section-label">How it works</div>
+
+    <svg class="workflow-diagram" viewBox="0 0 920 140" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Workflow: Resume PDF to Pinecone embeddings, to Groq LLM title suggestion, to JSearch live listings scored by Groq, to HuggingFace Dataset storage">
+      <defs>
+        <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="var(--accent)" />
+        </marker>
+      </defs>
+
+      <line x1="105" y1="70" x2="215" y2="70" stroke="var(--border)" stroke-width="2" marker-end="url(#arrowhead)" />
+      <line x1="325" y1="70" x2="435" y2="70" stroke="var(--border)" stroke-width="2" marker-end="url(#arrowhead)" />
+      <line x1="545" y1="70" x2="655" y2="70" stroke="var(--border)" stroke-width="2" marker-end="url(#arrowhead)" />
+      <line x1="765" y1="70" x2="875" y2="70" stroke="var(--border)" stroke-width="2" marker-end="url(#arrowhead)" />
+
+      <g>
+        <rect x="5" y="30" width="100" height="80" rx="10" fill="var(--bg-card)" stroke="var(--border)" />
+        <text x="55" y="58" text-anchor="middle" fill="var(--text)" font-size="12" font-weight="600" font-family="Inter, sans-serif">Resume</text>
+        <text x="55" y="74" text-anchor="middle" fill="var(--text-muted)" font-size="10" font-family="Inter, sans-serif">PDF upload</text>
+        <text x="55" y="92" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="Inter, sans-serif">Pinecone</text>
+      </g>
+
+      <g>
+        <rect x="215" y="30" width="110" height="80" rx="10" fill="var(--bg-card)" stroke="var(--border)" />
+        <text x="270" y="52" text-anchor="middle" fill="var(--text)" font-size="12" font-weight="600" font-family="Inter, sans-serif">Title</text>
+        <text x="270" y="68" text-anchor="middle" fill="var(--text)" font-size="12" font-weight="600" font-family="Inter, sans-serif">suggestion</text>
+        <text x="270" y="92" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="Inter, sans-serif">Groq LLM</text>
+      </g>
+
+      <g>
+        <rect x="435" y="30" width="110" height="80" rx="10" fill="var(--bg-card)" stroke="var(--border)" />
+        <text x="490" y="52" text-anchor="middle" fill="var(--text)" font-size="12" font-weight="600" font-family="Inter, sans-serif">Live search</text>
+        <text x="490" y="68" text-anchor="middle" fill="var(--text)" font-size="12" font-weight="600" font-family="Inter, sans-serif">+ scoring</text>
+        <text x="490" y="92" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="Inter, sans-serif">JSearch + Groq</text>
+      </g>
+
+      <g>
+        <rect x="655" y="30" width="110" height="80" rx="10" fill="var(--bg-card)" stroke="var(--border)" />
+        <text x="710" y="52" text-anchor="middle" fill="var(--text)" font-size="12" font-weight="600" font-family="Inter, sans-serif">Tracker</text>
+        <text x="710" y="68" text-anchor="middle" fill="var(--text)" font-size="12" font-weight="600" font-family="Inter, sans-serif">saved</text>
+        <text x="710" y="92" text-anchor="middle" fill="var(--accent)" font-size="9" font-family="Inter, sans-serif">HF Dataset</text>
+      </g>
+
+      <g>
+        <rect x="875" y="30" width="40" height="80" rx="10" fill="var(--accent-dim)" stroke="var(--accent)" opacity="0.5" />
+        <text x="895" y="74" text-anchor="middle" fill="var(--accent)" font-size="16" font-family="Inter, sans-serif">&#8594;</text>
+      </g>
+    </svg>
+
+    <div class="workflow-diagram-mobile" aria-hidden="true">
+      <div class="workflow-mobile-step"><div class="workflow-mobile-dot"></div><div><strong>Resume</strong><span>PDF upload, embedded in Pinecone</span></div></div>
+      <div class="workflow-mobile-connector"></div>
+      <div class="workflow-mobile-step"><div class="workflow-mobile-dot"></div><div><strong>Title suggestion</strong><span>Groq LLM reads the resume</span></div></div>
+      <div class="workflow-mobile-connector"></div>
+      <div class="workflow-mobile-step"><div class="workflow-mobile-dot"></div><div><strong>Live search + scoring</strong><span>JSearch + Groq score each job</span></div></div>
+      <div class="workflow-mobile-connector"></div>
+      <div class="workflow-mobile-step"><div class="workflow-mobile-dot"></div><div><strong>Tracker saved</strong><span>Stored in a HuggingFace Dataset</span></div></div>
+    </div>
+
     <div class="steps">
       <div class="step">
         <div class="num">01</div>

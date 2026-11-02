@@ -301,25 +301,43 @@ async def run_search_and_show_results(job_title: str, country_code: str, city: s
         tracker_record = record_search(tracker_record, job_title, country_code, city, results["jobs"])
         cl.user_session.set("tracker_record", tracker_record)
         user_id = cl.user_session.get("user_id")
-        saved = save_user(user_id, tracker_record)
-        if not saved:
-            print(f"[app] Warning: could not save tracker record for user (search still shown to user).")
 
-        status_actions = []
+        # Same fire-and-forget pattern as mark_applied, for the same reason:
+        # HuggingFace rate-limits rapid successive commits (confirmed earlier
+        # this session), so this save should never block the next message.
+        title_part = f"search results for {job_title}"
+        asyncio.create_task(_background_save(user_id, tracker_record, title_part))
+
+        applied_actions = []
+        interested_actions = []
+        not_interested_actions = []
         for job in results["jobs"][:8]:
             key = f"{job.get('company', '')}::{job.get('title', '')}"
             short_label = job.get("title", "")[:30]
-            status_actions.append(
-                cl.Action(
-                    name="mark_applied",
-                    payload={"job_key": key},
-                    label=f"Applied: {short_label}",
-                )
+            applied_actions.append(
+                cl.Action(name="mark_applied", payload={"job_key": key}, label=f"Applied: {short_label}")
             )
-        if status_actions:
+            interested_actions.append(
+                cl.Action(name="mark_interested", payload={"job_key": key}, label=f"Interested: {short_label}")
+            )
+            not_interested_actions.append(
+                cl.Action(name="mark_not_interested", payload={"job_key": key}, label=f"Not interested: {short_label}")
+            )
+
+        if applied_actions:
             await cl.Message(
                 content="**Mark any you've applied to** (saved to your tracker):",
-                actions=status_actions[:8],
+                actions=applied_actions,
+            ).send()
+        if interested_actions:
+            await cl.Message(
+                content="**Mark any you're interested in:**",
+                actions=interested_actions,
+            ).send()
+        if not_interested_actions:
+            await cl.Message(
+                content="**Mark any you're not interested in:**",
+                actions=not_interested_actions,
             ).send()
 
     await send_next_steps_menu()
@@ -570,15 +588,13 @@ async def _background_save(user_id: str, tracker_record: dict, title_part: str):
         ).send()
 
 
-@cl.action_callback("mark_applied")
-async def on_mark_applied(action: cl.Action):
+async def _mark_job_status(job_key: str, status: str, confirm_verb: str):
     """
-    User marked a specific job as applied. Updates in-memory state and
-    confirms instantly; the slow network save to HuggingFace runs as a
-    background task so repeated clicks never block the chat (see
-    _background_save for why this was necessary).
+    Shared logic for mark_applied / mark_interested / mark_not_interested.
+    Updates in-memory state and confirms instantly; the slow network save
+    to HuggingFace runs as a background task so repeated clicks never block
+    the chat (see _background_save for why this was necessary).
     """
-    job_key = action.payload.get("job_key", "")
     tracker_record = cl.user_session.get("tracker_record")
     user_id = cl.user_session.get("user_id")
 
@@ -586,14 +602,29 @@ async def on_mark_applied(action: cl.Action):
         await cl.Message(content="Tracker isn't set up for this session.").send()
         return
 
-    tracker_record = update_job_status(tracker_record, job_key, "applied")
+    tracker_record = update_job_status(tracker_record, job_key, status)
     cl.user_session.set("tracker_record", tracker_record)
 
     title_part = job_key.split("::", 1)[-1] if "::" in job_key else job_key
-    await cl.Message(content=f"Marked **{title_part}** as applied.").send()
+    await cl.Message(content=f"Marked **{title_part}** as {confirm_verb}.").send()
 
     # Fire-and-forget: does not block this callback or any future click.
     asyncio.create_task(_background_save(user_id, tracker_record, title_part))
+
+
+@cl.action_callback("mark_applied")
+async def on_mark_applied(action: cl.Action):
+    await _mark_job_status(action.payload.get("job_key", ""), "applied", "applied")
+
+
+@cl.action_callback("mark_interested")
+async def on_mark_interested(action: cl.Action):
+    await _mark_job_status(action.payload.get("job_key", ""), "interested", "interested")
+
+
+@cl.action_callback("mark_not_interested")
+async def on_mark_not_interested(action: cl.Action):
+    await _mark_job_status(action.payload.get("job_key", ""), "not_interested", "not interested")
 
 
 @cl.action_callback("view_tracker")
